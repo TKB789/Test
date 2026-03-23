@@ -1667,6 +1667,7 @@ const NotebookPanel=()=>{
   const[drawSize,setDrawSize]=useState(3);
   const[drawEraser,setDrawEraser]=useState(false);
   const[pixelColor,setPixelColor]=useState("#f5576c");
+  const[pixelEraser,setPixelEraser]=useState(false);
   const[saved,setSaved]=useState(false);
   const[renaming,setRenaming]=useState(false);
   const[renameVal,setRenameVal]=useState("");
@@ -1756,10 +1757,11 @@ const NotebookPanel=()=>{
     for(let x=0;x<=dims.c;x++){ctx.beginPath();ctx.moveTo(x*cs,0);ctx.lineTo(x*cs,dims.r*cs);ctx.stroke();}
     for(let y=0;y<=dims.r;y++){ctx.beginPath();ctx.moveTo(0,y*cs);ctx.lineTo(dims.c*cs,y*cs);ctx.stroke();}
     Object.entries(pixels).forEach(([key,color])=>{const[r,cl]=key.split("-").map(Number);if(r<dims.r&&cl<dims.c){ctx.fillStyle=color;ctx.fillRect(cl*cs,r*cs,cs,cs);}});};
-  const setPixel=(row,col,color)=>{const dims=getPixelDims();if(row<0||row>=dims.r||col<0||col>=dims.c)return;
+  const setPixel=(row,col,color,erase)=>{const dims=getPixelDims();if(row<0||row>=dims.r||col<0||col>=dims.c)return;
     const key=`${row}-${col}`;const d=readNb();if(!d.pages?.[nbPageIdx])return;
     const pixels=d.pages[nbPageIdx].pixels||{};const old=pixels[key]||null;
-    if(pixels[key]===color)delete pixels[key];else pixels[key]=color;
+    if(erase){delete pixels[key];}
+    else if(pixels[key]===color)delete pixels[key];else pixels[key]=color;
     pixelUndoRef.current.push({key,old});d.pages[nbPageIdx].pixels=pixels;writeNb(d);
     const c=pixCanvasRef.current;if(c){const ctx=c.getContext("2d");const cs=getPixelCellSize();
       ctx.fillStyle=pixels[key]||"#111";ctx.fillRect(col*cs,row*cs,cs,cs);
@@ -1770,13 +1772,14 @@ const NotebookPanel=()=>{
     const c=pixCanvasRef.current;if(c){const ctx=c.getContext("2d");const cs=getPixelCellSize();const[r,cl]=key.split("-").map(Number);
       ctx.fillStyle=old||"#111";ctx.fillRect(cl*cs,r*cs,cs,cs);ctx.strokeStyle="rgba(255,255,255,.06)";ctx.lineWidth=0.5;ctx.strokeRect(cl*cs,r*cs,cs,cs);}};
   const pixColorRef=React.useRef(pixelColor);pixColorRef.current=pixelColor;
+  const pixEraserRef=React.useRef(pixelEraser);pixEraserRef.current=pixelEraser;
   const handlePixEvent=(e,isStart)=>{if(e.touches&&e.touches.length>1)return;
     if(isStart)e.preventDefault();else if(!pixIsPainting.current)return;else e.preventDefault();
     if(isStart)pixIsPainting.current=true;const c=pixCanvasRef.current;if(!c)return;
     const r=c.getBoundingClientRect();const sx=c.width/r.width,sy=c.height/r.height;const t=e.touches?e.touches[0]:e;
     const dims=getPixelDims();const cs=getPixelCellSize();
     const col=Math.floor(((t.clientX-r.left)*sx)/cs);const row=Math.floor(((t.clientY-r.top)*sy)/cs);
-    if(row>=0&&row<dims.r&&col>=0&&col<dims.c)setPixel(row,col,pixColorRef.current);};
+    if(row>=0&&row<dims.r&&col>=0&&col<dims.c)setPixel(row,col,pixColorRef.current,pixEraserRef.current);};
   const pixCanvasCallbackRef=React.useCallback((node)=>{if(node){pixCanvasRef.current=node;
     node.addEventListener("touchstart",(e)=>handlePixEvent(e,true),{passive:false});
     node.addEventListener("touchmove",(e)=>handlePixEvent(e,false),{passive:false});
@@ -1886,11 +1889,14 @@ const NotebookPanel=()=>{
         <button onClick={doSave} style={btn(saved?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b"}:{color:"#aaa"})}>{saved?"Saved ✓":"Save"}</button>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 6px",flexShrink:0,flexWrap:"wrap"}}>
+        <button onClick={()=>setPixelEraser(e=>!e)} style={btn(pixelEraser?{background:"rgba(245,87,108,.2)",color:"#f5576c"}:{color:"#ccc"})}>
+          <span style={{display:"inline-block",transform:pixelEraser?"rotate(180deg)":"none",transition:"transform .2s"}}>✏️</span></button>
+        <div style={{width:1,height:20,background:"rgba(255,255,255,.1)",margin:"0 2px"}}/>
         <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={btn({padding:"4px 8px"})}>−</button>
         <span style={{fontSize:11,opacity:.4,minWidth:32,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
         <button onClick={()=>setPageZoom(z=>Math.min(6,z+0.2))} style={btn({padding:"4px 8px"})}>+</button>
         <div style={{width:1,height:20,background:"rgba(255,255,255,.1)",margin:"0 2px"}}/>
-        {PIXEL_COLORS.map(c=>(<div key={c} onClick={()=>setPixelColor(c)} style={{width:24,height:24,borderRadius:5,background:c,border:pixelColor===c?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer"}}/>))}
+        {!pixelEraser&&PIXEL_COLORS.map(c=>(<div key={c} onClick={()=>setPixelColor(c)} style={{width:24,height:24,borderRadius:5,background:c,border:pixelColor===c?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer"}}/>))}
         <button onClick={()=>{if(!confirm("Clear all?"))return;const d=readNb();if(d.pages?.[nbPageIdx]){d.pages[nbPageIdx].pixels={};writeNb(d);drawPixelGrid();}}}
           style={btn({background:"rgba(245,87,108,.1)",border:"1px solid rgba(245,87,108,.2)",color:"#f5576c",fontSize:11,padding:"4px 10px"})}>Clear</button>
       </div>
@@ -1923,7 +1929,7 @@ const NotebookPanel=()=>{
       {pageDrawMode&&<div style={{display:"flex",flexDirection:"column",gap:4,padding:"2px 10px 6px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:5}}>
           <button onClick={()=>setDrawEraser(e=>!e)} style={btn(drawEraser?{background:"rgba(245,87,108,.2)",color:"#f5576c"}:{color:"#ccc"})}>
-            {drawEraser?"🧽":"✏️"}</button>
+            <span style={{display:"inline-block",transform:drawEraser?"rotate(180deg)":"none",transition:"transform .2s"}}>✏️</span></button>
           {!drawEraser&&["#fff","#f5576c","#feca57","#43e97b","#60a5fa","#f093fb","#fb923c"].map(c=>(
             <div key={c} onClick={()=>setDrawColor(c)} style={{width:24,height:24,borderRadius:6,background:c,border:drawColor===c?"2px solid #fff":"2px solid rgba(255,255,255,.1)",cursor:"pointer"}}/>))}
           <div style={{flex:1}}/>
