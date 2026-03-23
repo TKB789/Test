@@ -1932,7 +1932,7 @@ const NotebookPanel=()=>{
           :<span onClick={startRename} style={{fontSize:11,fontWeight:800,color:"#e8e0f0",cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:120}}>{nbPageIdx+1}. {page.title||"Untitled"}</span>}
           <button onClick={()=>hasNext&&goNext()} style={{background:"none",border:"none",fontSize:16,color:hasNext?"#a8b4f0":"#333",cursor:hasNext?"pointer":"default",padding:"4px"}}>▶</button>
         </div>
-        <button onClick={()=>{saveAll();setPageDrawMode(m=>!m);}} style={btn(pageDrawMode?{background:"rgba(240,147,251,.2)",border:"1px solid rgba(240,147,251,.4)",color:"#f093fb"}:{color:"#aaa"})}>🎨</button>
+        <button onClick={()=>{saveAll();setPageDrawMode(m=>!m);}} style={btn(pageDrawMode?{background:"rgba(240,147,251,.2)",border:"1px solid rgba(240,147,251,.4)",color:"#f093fb"}:{color:"#aaa"})}>{pageDrawMode?"✏️":"🎨"}</button>
         <button onClick={doSave} style={btn(saved?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b"}:{color:"#aaa"})}>{saved?"Saved ✓":"Save"}</button>
       </div>
       {pageDrawMode&&<div style={{display:"flex",flexDirection:"column",gap:4,padding:"2px 10px 6px",flexShrink:0}}>
@@ -1949,11 +1949,11 @@ const NotebookPanel=()=>{
             <div style={{width:Math.max(s,2),height:Math.max(s,2),borderRadius:"50%",background:drawColor}}/></div>))}
         </div>}
       </div>}
-      {!pageDrawMode&&<div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 6px",flexShrink:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 6px",flexShrink:0}}>
         <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={btn({padding:"4px 8px"})}>−</button>
         <span style={{fontSize:11,opacity:.4}}>{Math.round(pageZoom*100)}%</span>
         <button onClick={()=>setPageZoom(z=>Math.min(4,z+0.2))} style={btn({padding:"4px 8px"})}>+</button>
-      </div>}
+      </div>
       <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch"}}>
         <div style={{transform:`scale(${pageZoom})`,transformOrigin:"top left",width:`${100/pageZoom}%`}}>
           <PageBg type={page.type}>
