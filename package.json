@@ -1,0 +1,13 @@
+{
+  "name": "zobuddy",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Zobuddy - Your Zodiac Buddy Companion",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-react": "^7.23.3"
+  }
+}

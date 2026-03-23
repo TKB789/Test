@@ -1,0 +1,75 @@
+/**
+ * Zobuddy Build Script
+ * Compiles src/app.jsx (JSX) into a production index.html with pre-compiled JavaScript.
+ * No more in-browser Babel — faster loads on all devices.
+ * 
+ * Run: node build.js
+ * Requires: npm install (installs @babel/core and @babel/preset-react)
+ */
+const fs = require('fs');
+const path = require('path');
+const babel = require('@babel/core');
+
+// Read the JSX source
+const jsxSource = fs.readFileSync(path.join(__dirname, 'src', 'app.jsx'), 'utf-8');
+
+// Compile JSX to plain JavaScript
+console.log('Compiling JSX...');
+const result = babel.transformSync(jsxSource, {
+  presets: [
+    ['@babel/preset-react', { runtime: 'classic' }]
+  ],
+  plugins: [],
+  filename: 'app.jsx',
+});
+
+if (!result || !result.code) {
+  console.error('Babel compilation failed!');
+  process.exit(1);
+}
+
+console.log(`Compiled successfully (${result.code.length} bytes)`);
+
+// Build the final index.html — same structure, but with compiled JS instead of JSX+Babel
+const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(regs=>{regs.forEach(r=>r.update());});}</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Zobuddy">
+  <meta name="theme-color" content="#0a0a1a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Zobuddy</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐾</text></svg>">
+  <link rel="manifest" href="manifest.json">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>*{margin:0;padding:0;box-sizing:border-box}html,body,#root{height:100%;width:100%;overflow:hidden}body{background:#0a0a1a;font-family:'Nunito','Segoe UI',sans-serif}</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script>
+${result.code}
+  </script>
+  <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});</script>
+</body>
+</html>`;
+
+// Write output
+const distDir = path.join(__dirname, 'dist');
+if (!fs.existsSync(distDir)) fs.mkdirSync(distDir);
+
+fs.writeFileSync(path.join(distDir, 'index.html'), html);
+
+// Copy all public assets to dist
+const publicDir = path.join(__dirname, 'public');
+fs.readdirSync(publicDir).forEach(file => {
+  fs.copyFileSync(path.join(publicDir, file), path.join(distDir, file));
+});
+
+console.log('Build complete! Output in dist/');
+console.log(`  index.html: ${(html.length / 1024).toFixed(1)} KB`);
