@@ -1824,8 +1824,8 @@ const NotebookPanel=()=>{
 
   // ─── NAVIGATION ─────────────────────────────────────────────────
   const goToc=()=>{saveAll();syncState();setPageDrawMode(false);setPageZoom(1);setNbView("toc");};
-  const goPrev=()=>{saveAll();drawImgRef.current=null;drawCanvasRef.current=null;setNbPageIdx(i=>i-1);};
-  const goNext=()=>{saveAll();drawImgRef.current=null;drawCanvasRef.current=null;setNbPageIdx(i=>i+1);};
+  const goPrev=()=>{saveAll();drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=pageIdxRef.current-1;setNbPageIdx(i=>i-1);};
+  const goNext=()=>{saveAll();drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=pageIdxRef.current+1;setNbPageIdx(i=>i+1);};
 
   // ─── STYLES ─────────────────────────────────────────────────────
   const hs=20,hcol=hs*1.5,hrow=Math.round(hs*Math.sqrt(3)),hoff=Math.round(hrow/2);
@@ -2005,13 +2005,14 @@ const NotebookPanel=()=>{
         const np={title,type:nbNewType,content:"",drawData:null,pixels:{},created:Date.now()};
         if(nbNewType==="pixel")np.pixelSize=nbPixelSize;
         const d=readNb();d.pages.push(np);saveNb(d);setNbNewTitle("");
+        const newIdx=d.pages.length-1;pageIdxRef.current=newIdx;
         drawImgRef.current=null;drawCanvasRef.current=null;textRef.current="";
-        setNbPageIdx(d.pages.length-1);setNbView("page");}}
+        setNbPageIdx(newIdx);setNbView("page");}}
         style={{width:"100%",background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",borderRadius:10,padding:"8px",fontSize:14,fontWeight:700,cursor:"pointer"}}>+ Add Page</button>
     </div>
     {nbData.pages.length===0&&<div style={{textAlign:"center",opacity:.3,padding:20}}>No pages yet</div>}
     {nbData.pages.map((p,i)=>(
-      <div key={i} onClick={()=>{drawImgRef.current=null;drawCanvasRef.current=null;setNbPageIdx(i);setNbView("page");}}
+      <div key={i} onClick={()=>{drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=i;setNbPageIdx(i);setNbView("page");}}
         style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:4,borderRadius:10,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.06)",cursor:"pointer"}}>
         <span style={{fontSize:13,fontWeight:800,color:"rgba(102,126,234,.6)",minWidth:28}}>{i+1}.</span>
         <div style={{flex:1,minWidth:0}}>
