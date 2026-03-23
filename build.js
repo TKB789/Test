@@ -17,6 +17,7 @@ const jsxSource = fs.readFileSync(path.join(__dirname, 'src', 'app.jsx'), 'utf-8
 console.log('Compiling JSX...');
 const result = babel.transformSync(jsxSource, {
   presets: [
+    ['@babel/preset-env', { targets: { chrome: '80', safari: '13', firefox: '80' } }],
     ['@babel/preset-react', { runtime: 'classic' }]
   ],
   plugins: [],
@@ -50,8 +51,8 @@ const html = `<!DOCTYPE html>
 </head>
 <body>
   <div id="root"></div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
   <script>
 ${result.code}
   </script>
@@ -65,10 +66,14 @@ if (!fs.existsSync(distDir)) fs.mkdirSync(distDir);
 
 fs.writeFileSync(path.join(distDir, 'index.html'), html);
 
-// Copy all public assets to dist
-const publicDir = path.join(__dirname, 'public');
-fs.readdirSync(publicDir).forEach(file => {
-  fs.copyFileSync(path.join(publicDir, file), path.join(distDir, file));
+// Copy static assets from repo root to dist
+const assets = ['sw.js', 'manifest.json', 'icon-192.png', 'icon-512.png', '_headers.txt', 'LICENSE'];
+assets.forEach(file => {
+  const src = path.join(__dirname, file);
+  if (fs.existsSync(src)) {
+    fs.copyFileSync(src, path.join(distDir, file));
+    console.log(`  Copied ${file}`);
+  }
 });
 
 console.log('Build complete! Output in dist/');
