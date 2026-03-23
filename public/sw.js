@@ -1,4 +1,4 @@
-const CACHE_NAME='zodibuddy-v44';
+const CACHE_NAME='zodibuddy-v45';
 const CDN_ASSETS=[
   'https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap',
   'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
