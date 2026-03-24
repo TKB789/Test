@@ -1443,6 +1443,12 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     const[best,setBest]=useState(()=>{try{return JSON.parse(localStorage.getItem("zo_best_nback"))||{};}catch{return{};}});
     const[feedbackMsg,setFeedbackMsg]=useState(null);
     const timerRef=React.useRef(null);
+    const posBtnRef=React.useRef(null);
+    const letBtnRef=React.useRef(null);
+    const touchContainerRef=React.useRef(null);
+    const posTouched=React.useRef(new Set());
+    const letTouched=React.useRef(new Set());
+    const canRespondRef=React.useRef(false);
     const TOTAL_ROUNDS=20+nLevel*2;
     const STIM_TIME=2500;
     const PAUSE_TIME=500;
@@ -1468,6 +1474,36 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       setPosMatch(false);setLetMatch(false);setFeedbackMsg(null);
       setPhase("playing");setShowStim(true);
     };
+
+    // Multitouch handler for simultaneous button press
+    useEffect(()=>{
+      const node=touchContainerRef.current;if(!node)return;
+      const onTouchStart=(e)=>{
+        if(!canRespondRef.current)return;
+        e.preventDefault();
+        const posRect=posBtnRef.current?.getBoundingClientRect();
+        const letRect=letBtnRef.current?.getBoundingClientRect();
+        if(!posRect||!letRect)return;
+        for(let i=0;i<e.changedTouches.length;i++){
+          const t=e.changedTouches[i];const x=t.clientX,y=t.clientY;
+          if(x>=posRect.left&&x<=posRect.right&&y>=posRect.top&&y<=posRect.bottom&&!posTouched.current.has(t.identifier)){
+            posTouched.current.add(t.identifier);setPosMatch(p=>!p);
+          }
+          if(x>=letRect.left&&x<=letRect.right&&y>=letRect.top&&y<=letRect.bottom&&!letTouched.current.has(t.identifier)){
+            letTouched.current.add(t.identifier);setLetMatch(p=>!p);
+          }
+        }
+      };
+      const onTouchEnd=(e)=>{
+        for(let i=0;i<e.changedTouches.length;i++){
+          posTouched.current.delete(e.changedTouches[i].identifier);
+          letTouched.current.delete(e.changedTouches[i].identifier);
+        }
+      };
+      node.addEventListener("touchstart",onTouchStart,{passive:false});
+      node.addEventListener("touchend",onTouchEnd);
+      return()=>{node.removeEventListener("touchstart",onTouchStart);node.removeEventListener("touchend",onTouchEnd);};
+    });
 
     // Auto-advance steps
     useEffect(()=>{
@@ -1561,6 +1597,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     // ── PLAYING SCREEN ──
     const cur=sequence[step];
     const canRespond=step>=nLevel&&showStim;
+    canRespondRef.current=canRespond;
     return(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"8px 12px",overflow:"hidden"}}>
       {/* Header */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 4px 8px",flexShrink:0}}>
@@ -1600,65 +1637,27 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
           color:feedbackMsg==="✓"?"#43e97b":feedbackMsg==="½"?"#feca57":"#f5576c"}}>{feedbackMsg}</span>}
       </div>
 
-      {/* Response buttons - multitouch via native touchstart on container */}
-      {(()=>{
-        const posRef=React.useRef(null);const letRef=React.useRef(null);const containerRef=React.useRef(null);
-        const posToggled=React.useRef(new Set());const letToggled=React.useRef(new Set());
-        const handleTouches=React.useCallback((e)=>{
-          if(!canRespond)return;
-          e.preventDefault();
-          const posRect=posRef.current?.getBoundingClientRect();
-          const letRect=letRef.current?.getBoundingClientRect();
-          if(!posRect||!letRect)return;
-          for(let i=0;i<e.changedTouches.length;i++){
-            const t=e.changedTouches[i];const x=t.clientX,y=t.clientY;
-            if(x>=posRect.left&&x<=posRect.right&&y>=posRect.top&&y<=posRect.bottom&&!posToggled.current.has(t.identifier)){
-              posToggled.current.add(t.identifier);setPosMatch(p=>!p);
-            }
-            if(x>=letRect.left&&x<=letRect.right&&y>=letRect.top&&y<=letRect.bottom&&!letToggled.current.has(t.identifier)){
-              letToggled.current.add(t.identifier);setLetMatch(p=>!p);
-            }
-          }
-        },[canRespond]);
-        const handleTouchEnd=React.useCallback((e)=>{
-          for(let i=0;i<e.changedTouches.length;i++){
-            posToggled.current.delete(e.changedTouches[i].identifier);
-            letToggled.current.delete(e.changedTouches[i].identifier);
-          }
-        },[]);
-        const containerCallback=React.useCallback((node)=>{
-          if(containerRef.current){
-            containerRef.current.removeEventListener("touchstart",containerRef.current._handler);
-            containerRef.current.removeEventListener("touchend",containerRef.current._endHandler);
-          }
-          if(node){
-            node._handler=handleTouches;node._endHandler=handleTouchEnd;
-            node.addEventListener("touchstart",handleTouches,{passive:false});
-            node.addEventListener("touchend",handleTouchEnd);
-          }
-          containerRef.current=node;
-        },[handleTouches,handleTouchEnd]);
-        return <div ref={containerCallback} style={{display:"flex",gap:12,padding:"8px 8px 16px",flexShrink:0,justifyContent:"center",touchAction:"none",userSelect:"none",WebkitUserSelect:"none"}}>
-          <div ref={posRef} onClick={()=>{if(canRespond)setPosMatch(p=>!p);}}
-            style={{flex:1,maxWidth:160,padding:"16px 8px",borderRadius:14,fontSize:15,fontWeight:800,cursor:canRespond?"pointer":"default",textAlign:"center",
-              background:posMatch?"rgba(96,165,250,.25)":"rgba(255,255,255,.04)",
-              border:posMatch?"2px solid rgba(96,165,250,.6)":"2px solid rgba(255,255,255,.08)",
-              color:posMatch?"#60a5fa":"rgba(255,255,255,.4)",
-              boxShadow:posMatch?"0 0 12px rgba(96,165,250,.3)":"none",
-              opacity:canRespond?1:.3,transition:"all .12s"}}>
-            📍 Position<br/><span style={{fontSize:11,fontWeight:600,opacity:.6}}>Match</span>
-          </div>
-          <div ref={letRef} onClick={()=>{if(canRespond)setLetMatch(p=>!p);}}
-            style={{flex:1,maxWidth:160,padding:"16px 8px",borderRadius:14,fontSize:15,fontWeight:800,cursor:canRespond?"pointer":"default",textAlign:"center",
-              background:letMatch?"rgba(240,147,251,.25)":"rgba(255,255,255,.04)",
-              border:letMatch?"2px solid rgba(240,147,251,.6)":"2px solid rgba(255,255,255,.08)",
-              color:letMatch?"#f093fb":"rgba(255,255,255,.4)",
-              boxShadow:letMatch?"0 0 12px rgba(240,147,251,.3)":"none",
-              opacity:canRespond?1:.3,transition:"all .12s"}}>
-            🔤 Letter<br/><span style={{fontSize:11,fontWeight:600,opacity:.6}}>Match</span>
-          </div>
-        </div>;
-      })()}
+      {/* Response buttons - multitouch via native touchstart, onClick fallback for desktop */}
+      <div ref={touchContainerRef} style={{display:"flex",gap:12,padding:"8px 8px 16px",flexShrink:0,justifyContent:"center",touchAction:"none",userSelect:"none",WebkitUserSelect:"none"}}>
+        <div ref={posBtnRef} onClick={()=>{if(canRespond)setPosMatch(p=>!p);}}
+          style={{flex:1,maxWidth:160,padding:"16px 8px",borderRadius:14,fontSize:15,fontWeight:800,cursor:canRespond?"pointer":"default",textAlign:"center",
+            background:posMatch?"rgba(96,165,250,.25)":"rgba(255,255,255,.04)",
+            border:posMatch?"2px solid rgba(96,165,250,.6)":"2px solid rgba(255,255,255,.08)",
+            color:posMatch?"#60a5fa":"rgba(255,255,255,.4)",
+            boxShadow:posMatch?"0 0 12px rgba(96,165,250,.3)":"none",
+            opacity:canRespond?1:.3,transition:"all .12s"}}>
+          📍 Position<br/><span style={{fontSize:11,fontWeight:600,opacity:.6}}>Match</span>
+        </div>
+        <div ref={letBtnRef} onClick={()=>{if(canRespond)setLetMatch(p=>!p);}}
+          style={{flex:1,maxWidth:160,padding:"16px 8px",borderRadius:14,fontSize:15,fontWeight:800,cursor:canRespond?"pointer":"default",textAlign:"center",
+            background:letMatch?"rgba(240,147,251,.25)":"rgba(255,255,255,.04)",
+            border:letMatch?"2px solid rgba(240,147,251,.6)":"2px solid rgba(255,255,255,.08)",
+            color:letMatch?"#f093fb":"rgba(255,255,255,.4)",
+            boxShadow:letMatch?"0 0 12px rgba(240,147,251,.3)":"none",
+            opacity:canRespond?1:.3,transition:"all .12s"}}>
+          🔤 Letter<br/><span style={{fontSize:11,fontWeight:600,opacity:.6}}>Match</span>
+        </div>
+      </div>
     </div>);
   };
 
