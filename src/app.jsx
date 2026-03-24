@@ -1438,6 +1438,10 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     const[showStim,setShowStim]=useState(false);
     const[posMatch,setPosMatch]=useState(false);
     const[letMatch,setLetMatch]=useState(false);
+    const posMatchRef=React.useRef(false);
+    const letMatchRef=React.useRef(false);
+    posMatchRef.current=posMatch;
+    letMatchRef.current=letMatch;
     const[results,setResults]=useState([]); // {posCorrect,letCorrect,posInput,letInput}
     const[score,setScore]=useState(0);
     const[best,setBest]=useState(()=>{try{return JSON.parse(localStorage.getItem("zo_best_nback"))||{};}catch{return{};}});
@@ -1509,13 +1513,15 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     useEffect(()=>{
       if(phase!=="playing")return;
       timerRef.current=setTimeout(()=>{
-        // Record result for current step
+        // Record result for current step — read from refs to get latest user input
         if(step>=nLevel){
           const isPosMatch=sequence[step].pos===sequence[step-nLevel].pos;
           const isLetMatch=sequence[step].letter===sequence[step-nLevel].letter;
-          const posCorrect=(posMatch===isPosMatch);
-          const letCorrect=(letMatch===isLetMatch);
-          setResults(prev=>[...prev,{posCorrect,letCorrect,posInput:posMatch,letInput:letMatch,
+          const curPos=posMatchRef.current;
+          const curLet=letMatchRef.current;
+          const posCorrect=(curPos===isPosMatch);
+          const letCorrect=(curLet===isLetMatch);
+          setResults(prev=>[...prev,{posCorrect,letCorrect,posInput:curPos,letInput:curLet,
             actualPos:isPosMatch,actualLet:isLetMatch}]);
           const pts=(posCorrect?1:0)+(letCorrect?1:0);
           setScore(prev=>prev+pts);
@@ -1531,10 +1537,11 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
           setFeedbackMsg(null);
           if(step+1>=TOTAL_ROUNDS){
             setPhase("done");
-            // Calculate final score percentage
+            // Calculate final score from results
             const maxPts=(TOTAL_ROUNDS-nLevel)*2;
             const finalScore=results.reduce((a,r)=>(r.posCorrect?1:0)+(r.letCorrect?1:0)+a,0)+
-              ((()=>{const isPM=sequence[step]?.pos===sequence[step-nLevel]?.pos;const isLM=sequence[step]?.letter===sequence[step-nLevel]?.letter;return(posMatch===isPM?1:0)+(letMatch===isLM?1:0);})());
+              ((()=>{const isPM=sequence[step]?.pos===sequence[step-nLevel]?.pos;const isLM=sequence[step]?.letter===sequence[step-nLevel]?.letter;
+                const cp=posMatchRef.current;const cl=letMatchRef.current;return(cp===isPM?1:0)+(cl===isLM?1:0);})());
             const pct=Math.round((finalScore/maxPts)*100);
             const bestKey=`n${nLevel}`;
             const prevBest=best[bestKey]||0;
