@@ -1300,14 +1300,18 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     const[answer,setAnswer]=useState(null);
     const[guess,setGuess]=useState([null,null,null,null,null]);
     const[won,setWon]=useState(false);
-    const[poolSlots,setPoolSlots]=useState([null,null,null,null,null]); // fixed 5 slots
+    const[poolSlots,setPoolSlots]=useState([null,null,null,null,null]);
     const[best,setBest]=useState(()=>{try{return Number(localStorage.getItem("zo_best_lineup"))||0;}catch{return 0;}});
     const[attempts,setAttempts]=useState(0);
     const[lastResult,setLastResult]=useState(null);
-    const[dragging,setDragging]=useState(null); // {buddy,fromArea:'platform'|'pool',fromIdx,x,y,startX,startY,isDrag}
+    const[history,setHistory]=useState([]);
+    const[showHistory,setShowHistory]=useState(false);
+    const[dragging,setDragging]=useState(null);
     const platRefs=React.useRef([]);
     const poolRefs=React.useRef([]);
     const dragRef=React.useRef(null);
+    const guessRef=React.useRef(guess);guessRef.current=guess;
+    const poolSlotsRef=React.useRef(poolSlots);poolSlotsRef.current=poolSlots;
     const DRAG_THRESHOLD=12;
 
     const initGame=()=>{
@@ -1317,118 +1321,110 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       let poolOrder=[...picked];
       do{poolOrder=[...picked].sort(()=>Math.random()-.5);}
       while(poolOrder.every((b,i)=>b===picked[i]));
-      setPoolSlots(poolOrder);
-      setGuess([null,null,null,null,null]);
-      setWon(false);setAttempts(0);setLastResult(null);setDragging(null);
+      const emptyGuess=[null,null,null,null,null];
+      setPoolSlots(poolOrder);poolSlotsRef.current=poolOrder;
+      setGuess(emptyGuess);guessRef.current=emptyGuess;
+      setWon(false);setAttempts(0);setLastResult(null);setDragging(null);setHistory([]);setShowHistory(false);
     };
     useEffect(()=>{initGame();},[]);
 
     const checkGuess=()=>{
-      if(guess.some(g=>g===null))return;
+      const g=guessRef.current;
+      if(g.some(v=>v===null))return;
       let correct=0;
-      for(let i=0;i<5;i++)if(guess[i]===answer[i])correct++;
+      for(let i=0;i<5;i++)if(g[i]===answer[i])correct++;
       const newAttempts=attempts+1;
       setAttempts(newAttempts);setLastResult(correct);
+      setHistory(prev=>[...prev,{guess:[...g],correct}]);
       if(correct===5){
         setWon(true);
         if(best===0||newAttempts<best){setBest(newAttempts);try{localStorage.setItem("zo_best_lineup",String(newAttempts));}catch{}}
       }
     };
 
-    // Find which platform slot a point is over
-    const findPlatSlotAt=(x,y)=>{
-      for(let i=0;i<5;i++){const el=platRefs.current[i];if(!el)continue;
-        const r=el.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return i;}
-      return-1;
-    };
-    // Find which pool slot a point is over
-    const findPoolSlotAt=(x,y)=>{
-      for(let i=0;i<5;i++){const el=poolRefs.current[i];if(!el)continue;
-        const r=el.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return i;}
-      return-1;
-    };
+    const findPlatSlotAt=(x,y)=>{for(let i=0;i<5;i++){const el=platRefs.current[i];if(!el)continue;const r=el.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return i;}return-1;};
+    const findPoolSlotAt=(x,y)=>{for(let i=0;i<5;i++){const el=poolRefs.current[i];if(!el)continue;const r=el.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return i;}return-1;};
 
-    // Atomic move using functional updates that don't nest
     const moveBuddy=(buddy,fromArea,fromIdx,toArea,toIdx)=>{
       if(fromArea===toArea&&fromIdx===toIdx)return;
       setLastResult(null);
-      if(fromArea==="platform"&&toArea==="platform"){
-        setGuess(prev=>{const n=[...prev];const swap=n[toIdx];n[toIdx]=buddy;n[fromIdx]=swap;return n;});
-      } else if(fromArea==="pool"&&toArea==="pool"){
-        setPoolSlots(prev=>{const n=[...prev];const swap=n[toIdx];n[toIdx]=buddy;n[fromIdx]=swap;return n;});
-      } else if(fromArea==="pool"&&toArea==="platform"){
-        // Read current guess to check for swap
-        const curGuess=[...guess];const swap=curGuess[toIdx];
-        setPoolSlots(prev=>{const n=[...prev];n[fromIdx]=swap;return n;});
-        setGuess(prev=>{const n=[...prev];n[toIdx]=buddy;return n;});
+      const g=[...guessRef.current];const p=[...poolSlotsRef.current];
+      if(fromArea==="pool"&&toArea==="platform"){
+        const swap=g[toIdx];p[fromIdx]=swap;g[toIdx]=buddy;
       } else if(fromArea==="platform"&&toArea==="pool"){
-        const curPool=[...poolSlots];const swap=curPool[toIdx];
-        setGuess(prev=>{const n=[...prev];n[fromIdx]=swap;return n;});
-        setPoolSlots(prev=>{const n=[...prev];n[toIdx]=buddy;return n;});
+        const swap=p[toIdx];g[fromIdx]=swap;p[toIdx]=buddy;
+      } else if(fromArea==="platform"&&toArea==="platform"){
+        const swap=g[toIdx];g[toIdx]=buddy;g[fromIdx]=swap;
+      } else if(fromArea==="pool"&&toArea==="pool"){
+        const swap=p[toIdx];p[toIdx]=buddy;p[fromIdx]=swap;
       }
+      guessRef.current=g;poolSlotsRef.current=p;
+      setGuess([...g]);setPoolSlots([...p]);
     };
 
-    // Tap handlers (when drag threshold not met)
     const tapFromPool=(idx)=>{
-      const buddy=poolSlots[idx];if(!buddy)return;
-      const emptyPlat=guess.indexOf(null);
-      if(emptyPlat>=0){moveBuddy(buddy,"pool",idx,"platform",emptyPlat);}
+      const buddy=poolSlotsRef.current[idx];if(!buddy)return;
+      const emptyPlat=guessRef.current.indexOf(null);
+      if(emptyPlat>=0)moveBuddy(buddy,"pool",idx,"platform",emptyPlat);
     };
     const tapFromPlatform=(idx)=>{
-      const buddy=guess[idx];if(!buddy)return;
-      const emptyPool=poolSlots.indexOf(null);
-      if(emptyPool>=0){moveBuddy(buddy,"platform",idx,"pool",emptyPool);}
+      const buddy=guessRef.current[idx];if(!buddy)return;
+      const emptyPool=poolSlotsRef.current.indexOf(null);
+      if(emptyPool>=0)moveBuddy(buddy,"platform",idx,"pool",emptyPool);
     };
 
     const onTouchStart=(buddy,fromArea,fromIdx)=>(e)=>{
-      if(!buddy)return;
-      e.preventDefault();
+      if(!buddy)return;e.preventDefault();
       const t=e.touches[0];
       dragRef.current={buddy,fromArea,fromIdx,x:t.clientX,y:t.clientY,startX:t.clientX,startY:t.clientY,isDrag:false};
-      // Don't setDragging yet — wait for threshold
     };
     const onTouchMove=(e)=>{
-      if(!dragRef.current)return;
-      e.preventDefault();
+      if(!dragRef.current)return;e.preventDefault();
       const t=e.touches[0];
       const dx=t.clientX-dragRef.current.startX,dy=t.clientY-dragRef.current.startY;
-      const wasDrag=dragRef.current.isDrag;
-      const isDrag=wasDrag||Math.sqrt(dx*dx+dy*dy)>DRAG_THRESHOLD;
+      const isDrag=dragRef.current.isDrag||Math.sqrt(dx*dx+dy*dy)>DRAG_THRESHOLD;
       dragRef.current={...dragRef.current,x:t.clientX,y:t.clientY,isDrag};
-      // Only trigger re-render once drag starts or while dragging
       if(isDrag)setDragging({...dragRef.current});
     };
     const onTouchEnd=(e)=>{
       if(!dragRef.current)return;
-      const d=dragRef.current;
-      const t=e.changedTouches[0];
+      const d=dragRef.current;const t=e.changedTouches[0];
       if(!d.isDrag){
-        // It was a tap
         if(d.fromArea==="pool")tapFromPool(d.fromIdx);
         else tapFromPlatform(d.fromIdx);
       } else {
-        // It was a drag — find drop target
         const platIdx=findPlatSlotAt(t.clientX,t.clientY);
         const poolIdx=findPoolSlotAt(t.clientX,t.clientY);
-        if(platIdx>=0){
-          moveBuddy(d.buddy,d.fromArea,d.fromIdx,"platform",platIdx);
-        } else if(poolIdx>=0){
-          moveBuddy(d.buddy,d.fromArea,d.fromIdx,"pool",poolIdx);
-        }
-        // If dropped nowhere, stays where it was
+        if(platIdx>=0)moveBuddy(d.buddy,d.fromArea,d.fromIdx,"platform",platIdx);
+        else if(poolIdx>=0)moveBuddy(d.buddy,d.fromArea,d.fromIdx,"pool",poolIdx);
       }
       dragRef.current=null;setDragging(null);
     };
 
     if(!answer)return null;
 
-    if(won)return(<div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
+    if(won)return(<div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",padding:20,overflowY:"auto"}}>
       <div style={{fontSize:48,marginBottom:10}}>🎉</div>
       <div style={{fontSize:22,fontWeight:900,color:"#e8e0f0"}}>You Got It!</div>
       <div style={{display:"flex",gap:8,marginTop:12,marginBottom:8}}>{answer.map((b,i)=><span key={i} style={{fontSize:36}}>{b}</span>)}</div>
       <div style={{fontSize:18,fontWeight:800,color:"#feca57",marginTop:4}}>Solved in {attempts} {attempts===1?"check":"checks"}</div>
       {(best===0||attempts<=best)&&<div style={{fontSize:14,color:"#43e97b",fontWeight:700,marginTop:4}}>🏆 New Best!</div>}
       {best>0&&attempts>best&&<div style={{fontSize:12,opacity:.5,marginTop:2}}>Best: {best} checks</div>}
+      {history.length>0&&<div style={{width:"100%",maxWidth:320,marginTop:16}}>
+        <div style={{fontSize:13,fontWeight:800,opacity:.4,marginBottom:6,textAlign:"center"}}>YOUR GUESSES</div>
+        {history.map((h,hi)=>(
+          <div key={hi} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:3,borderRadius:8,
+            background:h.correct===5?"rgba(67,233,123,.1)":"rgba(255,255,255,.03)",border:h.correct===5?"1px solid rgba(67,233,123,.2)":"1px solid rgba(255,255,255,.06)"}}>
+            <span style={{fontSize:11,fontWeight:800,color:"rgba(167,139,250,.5)",minWidth:18}}>#{hi+1}</span>
+            <div style={{display:"flex",gap:3,flex:1}}>
+              {h.guess.map((b,i)=>{const ok=b===answer[i];
+                return <div key={i} style={{width:32,height:32,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",
+                  background:ok?"rgba(67,233,123,.15)":"rgba(255,255,255,.04)",border:ok?"1px solid rgba(67,233,123,.3)":"1px solid rgba(255,255,255,.06)"}}>
+                  <span style={{fontSize:18}}>{b}</span></div>;})}
+            </div>
+            <span style={{fontSize:13,fontWeight:800,color:h.correct>=4?"#43e97b":h.correct>=2?"#feca57":"#f5576c"}}>{h.correct}/5</span>
+          </div>))}
+      </div>}
       <div style={{display:"flex",gap:8,marginTop:16}}>
         <button onClick={()=>{setGameKey(k=>k+1);}} style={{background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",borderRadius:12,padding:"10px 24px",fontSize:15,fontWeight:700,cursor:"pointer"}}>Play Again</button>
         <button onClick={()=>setGame(null)} style={{background:"rgba(255,255,255,.08)",color:"#ccc",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,padding:"10px 20px",fontSize:15,fontWeight:700,cursor:"pointer"}}>Exit to Menu</button>
@@ -1447,7 +1443,6 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
         <div style={{fontSize:12,opacity:.3,marginTop:2}}>Checks: {attempts}{best>0?` · Best: ${best}`:""}</div>
       </div>
 
-      {/* Result banner */}
       {lastResult!==null&&<div style={{textAlign:"center",padding:"10px 14px",marginBottom:10,borderRadius:12,
         background:lastResult>=4?"rgba(67,233,123,.12)":lastResult>=2?"rgba(254,202,87,.1)":"rgba(245,87,108,.08)",
         border:lastResult>=4?"1px solid rgba(67,233,123,.25)":lastResult>=2?"1px solid rgba(254,202,87,.2)":"1px solid rgba(245,87,108,.15)"}}>
@@ -1456,56 +1451,72 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
         <div style={{fontSize:11,opacity:.3,marginTop:4}}>Rearrange and check again!</div>
       </div>}
 
-      {/* Lineup platform */}
       <div style={{background:"rgba(167,139,250,.06)",border:"1px solid rgba(167,139,250,.15)",borderRadius:14,padding:"12px 8px",marginBottom:12}}>
         <div style={{fontSize:11,fontWeight:700,opacity:.3,textAlign:"center",marginBottom:8,letterSpacing:1}}>LINEUP PLATFORM</div>
         <div style={{display:"flex",gap:6,justifyContent:"center"}}>
           {guess.map((b,i)=>{
-            const isHover=hoverPlat===i;
-            const isDrag=isDraggingFrom("platform",i);
+            const isHover=hoverPlat===i;const isDrag=isDraggingFrom("platform",i);
             return(<div key={"p"+i} ref={el=>platRefs.current[i]=el}
               onTouchStart={b?onTouchStart(b,"platform",i):undefined}
               style={{width:56,height:64,borderRadius:12,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
                 background:isHover?"rgba(167,139,250,.3)":b?"rgba(167,139,250,.15)":"rgba(255,255,255,.03)",
                 border:isHover?"2px solid rgba(167,139,250,.7)":b?"2px solid rgba(167,139,250,.4)":"2px dashed rgba(255,255,255,.12)",
-                cursor:b?"grab":"default",transition:"border .1s, background .1s",
-                opacity:isDrag?.25:1}}>
+                cursor:b?"grab":"default",transition:"border .1s, background .1s",opacity:isDrag?.25:1}}>
               {b&&!isDrag?<span style={{fontSize:30}}>{b}</span>:<span style={{fontSize:16,opacity:.15}}>{i+1}</span>}
             </div>);
           })}
         </div>
       </div>
 
-      {/* Starting area - fixed 5 slots with underlines */}
       <div style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.06)",borderRadius:14,padding:"12px 8px",marginBottom:12}}>
         <div style={{fontSize:11,fontWeight:700,opacity:.3,textAlign:"center",marginBottom:8,letterSpacing:1}}>STARTING AREA</div>
         <div style={{display:"flex",gap:6,justifyContent:"center"}}>
           {poolSlots.map((b,i)=>{
-            const isHover=hoverPool===i;
-            const isDrag=isDraggingFrom("pool",i);
+            const isHover=hoverPool===i;const isDrag=isDraggingFrom("pool",i);
             return(<div key={"s"+i} ref={el=>poolRefs.current[i]=el}
               onTouchStart={b?onTouchStart(b,"pool",i):undefined}
               style={{width:52,height:56,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",
                 background:isHover?"rgba(255,255,255,.1)":b?"rgba(255,255,255,.06)":"transparent",
                 border:isHover?"2px solid rgba(255,255,255,.3)":b?"2px solid rgba(255,255,255,.1)":"2px solid transparent",
                 borderBottom:isHover?"2px solid rgba(255,255,255,.3)":b?"2px solid rgba(255,255,255,.1)":"2px solid rgba(255,255,255,.15)",
-                cursor:b?"grab":"default",transition:"border .1s, background .1s",
-                opacity:isDrag?.25:1}}>
+                cursor:b?"grab":"default",transition:"border .1s, background .1s",opacity:isDrag?.25:1}}>
               {b&&!isDrag?<span style={{fontSize:28}}>{b}</span>:null}
             </div>);
           })}
         </div>
       </div>
 
-      {/* Check button */}
-      <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+      <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:8}}>
         <button onClick={checkGuess} disabled={guess.some(g=>g===null)}
           style={{background:guess.some(g=>g===null)?"rgba(255,255,255,.04)":"linear-gradient(135deg,#667eea,#764ba2)",
             color:guess.some(g=>g===null)?"#555":"#fff",border:"none",borderRadius:12,padding:"12px 32px",fontSize:16,fontWeight:800,cursor:guess.some(g=>g===null)?"default":"pointer"}}>
           {lastResult!==null?"Check Again":"Check Lineup"}</button>
       </div>
 
-      {/* Floating drag ghost */}
+      {history.length>0&&!showHistory&&<div style={{textAlign:"center",marginBottom:8}}>
+        <button onClick={()=>setShowHistory(true)}
+          style={{background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",borderRadius:10,padding:"8px 16px",fontSize:12,fontWeight:700,color:"#888",cursor:"pointer"}}>
+          👁 Reveal History ({history.length} guess{history.length>1?"es":""})</button>
+      </div>}
+
+      {showHistory&&history.length>0&&<div style={{marginBottom:8}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+          <span style={{fontSize:12,fontWeight:800,opacity:.4}}>GUESS HISTORY</span>
+          <button onClick={()=>setShowHistory(false)} style={{background:"none",border:"none",color:"#888",fontSize:11,cursor:"pointer",fontWeight:700}}>Hide</button>
+        </div>
+        {history.map((h,hi)=>(
+          <div key={hi} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",marginBottom:2,borderRadius:8,
+            background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.06)"}}>
+            <span style={{fontSize:10,fontWeight:800,color:"rgba(167,139,250,.5)",minWidth:16}}>#{hi+1}</span>
+            <div style={{display:"flex",gap:3,flex:1}}>
+              {h.guess.map((b,i)=><div key={i} style={{width:28,height:28,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",
+                background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.06)"}}>
+                <span style={{fontSize:16}}>{b}</span></div>)}
+            </div>
+            <span style={{fontSize:12,fontWeight:800,color:h.correct>=4?"#43e97b":h.correct>=2?"#feca57":"#f5576c"}}>{h.correct}/5</span>
+          </div>))}
+      </div>}
+
       {dragging&&dragging.isDrag&&<div style={{position:"fixed",left:dragging.x-28,top:dragging.y-28,width:56,height:56,
         borderRadius:14,background:"rgba(167,139,250,.3)",border:"2px solid rgba(167,139,250,.6)",
         display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none",zIndex:9999,
@@ -1514,6 +1525,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       </div>}
     </div>);
   };
+
 
   // ═══ DUAL N-BACK (cognitive training) ═══
   const DualNBack=()=>{
