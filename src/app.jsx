@@ -1386,17 +1386,19 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       if(!buddy)return;
       e.preventDefault();
       const t=e.touches[0];
-      const d={buddy,fromArea,fromIdx,x:t.clientX,y:t.clientY,startX:t.clientX,startY:t.clientY,isDrag:false};
-      dragRef.current=d;setDragging(d);
+      dragRef.current={buddy,fromArea,fromIdx,x:t.clientX,y:t.clientY,startX:t.clientX,startY:t.clientY,isDrag:false};
+      // Don't setDragging yet — wait for threshold
     };
     const onTouchMove=(e)=>{
       if(!dragRef.current)return;
       e.preventDefault();
       const t=e.touches[0];
       const dx=t.clientX-dragRef.current.startX,dy=t.clientY-dragRef.current.startY;
-      const isDrag=dragRef.current.isDrag||Math.sqrt(dx*dx+dy*dy)>DRAG_THRESHOLD;
+      const wasDrag=dragRef.current.isDrag;
+      const isDrag=wasDrag||Math.sqrt(dx*dx+dy*dy)>DRAG_THRESHOLD;
       dragRef.current={...dragRef.current,x:t.clientX,y:t.clientY,isDrag};
-      setDragging({...dragRef.current});
+      // Only trigger re-render once drag starts or while dragging
+      if(isDrag)setDragging({...dragRef.current});
     };
     const onTouchEnd=(e)=>{
       if(!dragRef.current)return;
