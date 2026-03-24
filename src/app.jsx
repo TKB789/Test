@@ -1889,7 +1889,6 @@ const NotebookPanel=()=>{
         <button onClick={doSave} style={btn(saved?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b"}:{color:"#aaa"})}>{saved?"Saved ✓":"Save"}</button>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 6px",flexShrink:0,flexWrap:"wrap"}}>
-        <button onClick={()=>setPixelEraser(e=>!e)} style={btn(pixelEraser?{background:"rgba(245,87,108,.2)",color:"#f5576c"}:{color:"#ccc"})}>
         <button onClick={()=>setPixelEraser(e=>!e)} style={btn(pixelEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",boxShadow:"0 0 8px rgba(245,87,108,.3)"}:{color:"#ccc"})}>
           <span style={{display:"inline-block",transform:pixelEraser?"rotate(180deg)":"none",transition:"transform .2s"}}>✏️</span></button>
         <div style={{width:1,height:20,background:"rgba(255,255,255,.1)",margin:"0 2px"}}/>
