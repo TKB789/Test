@@ -1662,6 +1662,7 @@ const NotebookPanel=()=>{
   const[nbPixelSize,setNbPixelSize]=useState("32x32");
   const[nbSetPw,setNbSetPw]=useState("");
   const[nbSetPw2,setNbSetPw2]=useState("");
+  const[nbExpandedIdx,setNbExpandedIdx]=useState(null);
   const[pageZoom,setPageZoom]=useState(1);
   const[pageDrawMode,setPageDrawMode]=useState(false);
   const[drawColor,setDrawColor]=useState("#fff");
@@ -2045,19 +2046,25 @@ const NotebookPanel=()=>{
         style={{width:"100%",background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",borderRadius:10,padding:"8px",fontSize:14,fontWeight:700,cursor:"pointer"}}>+ Add Page</button>
     </div>
     {nbData.pages.length===0&&<div style={{textAlign:"center",opacity:.3,padding:20}}>No pages yet</div>}
-    {nbData.pages.map((p,i)=>(
-      <div key={i} onClick={()=>{drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=i;setNbPageIdx(i);setNbView("page");}}
-        style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:4,borderRadius:10,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.06)",cursor:"pointer"}}>
-        <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}>
-          <button onClick={()=>{if(!confirm(`Delete "${p.title}"?`))return;const d=readNb();d.pages.splice(i,1);saveNb(d);}} style={btn({background:"rgba(245,87,108,.08)",border:"1px solid rgba(245,87,108,.15)",color:"#f5576c",fontSize:10,padding:"3px 6px"})}>🗑</button>
+    {nbData.pages.map((p,i)=>{
+      const isExpanded=nbExpandedIdx===i;
+      return(<div key={i} style={{background:isExpanded?"rgba(255,255,255,.05)":"rgba(255,255,255,.03)",border:isExpanded?"1px solid rgba(102,126,234,.2)":"1px solid rgba(255,255,255,.06)",borderRadius:10,padding:"10px 12px",marginBottom:4,cursor:"pointer"}}>
+        <div onClick={()=>setNbExpandedIdx(isExpanded?null:i)} style={{display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:13,fontWeight:800,color:"rgba(102,126,234,.6)",minWidth:28}}>{i+1}.</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:700,color:"#e8e0f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title||"Untitled"}</div>
+            <div style={{fontSize:11,opacity:.3}}>{p.type==="pixel"?"🟨 "+(p.pixelSize||"32x32"):`📝 ${p.type}`}{p.drawData?" + 🎨":""}</div></div>
+          <span style={{fontSize:14,opacity:.3,transition:"transform .2s",transform:isExpanded?"rotate(90deg)":"none"}}>▶</span>
         </div>
-        <span style={{fontSize:13,fontWeight:800,color:"rgba(102,126,234,.6)",minWidth:28}}>{i+1}.</span>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:700,color:"#e8e0f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title||"Untitled"}</div>
-          <div style={{fontSize:11,opacity:.3}}>{p.type==="pixel"?"🟨 "+(p.pixelSize||"32x32"):`📝 ${p.type}`}{p.drawData?" + 🎨":""}</div></div>
-        <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}>
-          <button onClick={()=>{const d=readNb();d.archive.push(d.pages[i]);d.pages.splice(i,1);saveNb(d);}} style={btn({background:"rgba(254,202,87,.08)",border:"1px solid rgba(254,202,87,.15)",color:"#feca57",fontSize:10,padding:"3px 6px"})}>🗃️</button>
-        </div></div>))}
+        {isExpanded&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:8,borderTop:"1px solid rgba(255,255,255,.06)"}}>
+          <button onClick={()=>{drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=i;setNbPageIdx(i);setNbView("page");}}
+            style={{padding:"6px 16px",borderRadius:8,background:"rgba(102,126,234,.12)",border:"1px solid rgba(102,126,234,.25)",color:"#a8b4f0",fontSize:12,fontWeight:700,cursor:"pointer"}}>Open</button>
+          <button onClick={()=>{const d=readNb();d.archive.push(d.pages[i]);d.pages.splice(i,1);saveNb(d);setNbExpandedIdx(null);}}
+            style={{padding:"6px 16px",borderRadius:8,background:"rgba(254,202,87,.08)",border:"1px solid rgba(254,202,87,.15)",color:"#feca57",fontSize:12,fontWeight:700,cursor:"pointer"}}>🗃️ Archive</button>
+          <button onClick={()=>{if(!confirm(`Delete "${p.title}"?`))return;const d=readNb();d.pages.splice(i,1);saveNb(d);setNbExpandedIdx(null);}}
+            style={{padding:"6px 16px",borderRadius:8,background:"rgba(245,87,108,.08)",border:"1px solid rgba(245,87,108,.15)",color:"#f5576c",fontSize:12,fontWeight:700,cursor:"pointer"}}>Delete</button>
+        </div>}
+      </div>);})}
   </div>);
 };
 
