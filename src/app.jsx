@@ -2056,14 +2056,20 @@ const NotebookPanel=()=>{
             <div style={{fontSize:11,opacity:.3}}>{p.type==="pixel"?"🟨 "+(p.pixelSize||"32x32"):`📝 ${p.type}`}{p.drawData?" + 🎨":""}</div></div>
           <span style={{fontSize:14,opacity:.3,transition:"transform .2s",transform:isExpanded?"rotate(90deg)":"none"}}>▶</span>
         </div>
-        {isExpanded&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:8,borderTop:"1px solid rgba(255,255,255,.06)"}}>
+        {isExpanded&&<div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,.06)"}}>
+          {/* Preview */}
+          {p.type!=="pixel"&&p.content&&<div style={{fontSize:13,color:"rgba(232,224,240,.5)",lineHeight:1.5,marginBottom:8,maxHeight:60,overflow:"hidden",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{p.content.slice(0,150)}{p.content.length>150?"…":""}</div>}
+          {p.type!=="pixel"&&!p.content&&!p.drawData&&<div style={{fontSize:12,opacity:.25,marginBottom:8,fontStyle:"italic"}}>Empty page</div>}
+          {p.type==="pixel"&&<div style={{fontSize:12,opacity:.35,marginBottom:8}}>{Object.keys(p.pixels||{}).length} pixels drawn · {p.pixelSize||"32x32"}</div>}
+          {p.drawData&&<img src={p.drawData} style={{width:"100%",maxHeight:80,objectFit:"contain",borderRadius:6,border:"1px solid rgba(255,255,255,.06)",marginBottom:8,opacity:.6}}/>}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <button onClick={()=>{drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=i;setNbPageIdx(i);setNbView("page");}}
             style={{padding:"6px 16px",borderRadius:8,background:"rgba(102,126,234,.12)",border:"1px solid rgba(102,126,234,.25)",color:"#a8b4f0",fontSize:12,fontWeight:700,cursor:"pointer"}}>Open</button>
           <button onClick={()=>{const d=readNb();d.archive.push(d.pages[i]);d.pages.splice(i,1);saveNb(d);setNbExpandedIdx(null);}}
             style={{padding:"6px 16px",borderRadius:8,background:"rgba(254,202,87,.08)",border:"1px solid rgba(254,202,87,.15)",color:"#feca57",fontSize:12,fontWeight:700,cursor:"pointer"}}>🗃️ Archive</button>
           <button onClick={()=>{if(!confirm(`Delete "${p.title}"?`))return;const d=readNb();d.pages.splice(i,1);saveNb(d);setNbExpandedIdx(null);}}
             style={{padding:"6px 16px",borderRadius:8,background:"rgba(245,87,108,.08)",border:"1px solid rgba(245,87,108,.15)",color:"#f5576c",fontSize:12,fontWeight:700,cursor:"pointer"}}>Delete</button>
-        </div>}
+        </div></div>}
       </div>);})}
   </div>);
 };
