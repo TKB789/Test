@@ -1666,6 +1666,7 @@ const NotebookPanel=()=>{
   const[drawColor,setDrawColor]=useState("#fff");
   const[drawSize,setDrawSize]=useState(3);
   const[drawEraser,setDrawEraser]=useState(false);
+  const[drawEraserSize,setDrawEraserSize]=useState(20);
   const[pixelColor,setPixelColor]=useState("#f5576c");
   const[pixelEraser,setPixelEraser]=useState(false);
   const[saved,setSaved]=useState(false);
@@ -1681,6 +1682,7 @@ const NotebookPanel=()=>{
   const colorRef=React.useRef(drawColor);colorRef.current=drawColor;
   const sizeRef=React.useRef(drawSize);sizeRef.current=drawSize;
   const eraserRef=React.useRef(drawEraser);eraserRef.current=drawEraser;
+  const eraserSizeRef=React.useRef(drawEraserSize);eraserSizeRef.current=drawEraserSize;
   const textareaRef=React.useRef(null);
   const textRef=React.useRef(""); // current text content
   const pageIdxRef=React.useRef(0);
@@ -1725,11 +1727,11 @@ const NotebookPanel=()=>{
   const onDown=React.useCallback((e)=>{if(e.touches&&e.touches.length>1)return;e.preventDefault();const c=drawCanvasRef.current;if(!c)return;const ctx=c.getContext("2d");
     const r=c.getBoundingClientRect(),sx=c.width/r.width,sy=c.height/r.height;const t=e.touches?e.touches[0]:e;
     const x=(t.clientX-r.left)*sx,y=(t.clientY-r.top)*sy;
-    if(eraserRef.current){ctx.globalCompositeOperation="destination-out";ctx.lineWidth=20;}
+    if(eraserRef.current){ctx.globalCompositeOperation="destination-out";ctx.lineWidth=eraserSizeRef.current;}
     else{ctx.globalCompositeOperation="source-over";ctx.strokeStyle=colorRef.current;ctx.fillStyle=colorRef.current;ctx.lineWidth=sizeRef.current;}
     ctx.lineCap="round";ctx.lineJoin="round";
     // Draw a dot at tap point
-    ctx.beginPath();ctx.arc(x,y,eraserRef.current?10:sizeRef.current/2,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(x,y,eraserRef.current?eraserSizeRef.current/2:sizeRef.current/2,0,Math.PI*2);ctx.fill();
     ctx.beginPath();ctx.moveTo(x,y);
     isDrawingRef.current=true;},[]);
   const onMove=React.useCallback((e)=>{if(e.touches&&e.touches.length>1){isDrawingRef.current=false;return;}if(!isDrawingRef.current)return;e.preventDefault();const c=drawCanvasRef.current;if(!c)return;const ctx=c.getContext("2d");
@@ -1890,7 +1892,7 @@ const NotebookPanel=()=>{
       </div>
       <div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 6px",flexShrink:0,flexWrap:"wrap"}}>
         <button onClick={()=>setPixelEraser(e=>!e)} style={btn(pixelEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",boxShadow:"0 0 8px rgba(245,87,108,.3)"}:{color:"#ccc"})}>
-          <span style={{display:"inline-block",transform:pixelEraser?"rotate(180deg)":"none",transition:"transform .2s"}}>✏️</span></button>
+          <span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span></button>
         <div style={{width:1,height:20,background:"rgba(255,255,255,.1)",margin:"0 2px"}}/>
         <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={btn({padding:"4px 8px"})}>−</button>
         <span style={{fontSize:11,opacity:.4,minWidth:32,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
@@ -1929,7 +1931,7 @@ const NotebookPanel=()=>{
       {pageDrawMode&&<div style={{display:"flex",flexDirection:"column",gap:4,padding:"2px 10px 6px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:5}}>
           <button onClick={()=>setDrawEraser(e=>!e)} style={btn(drawEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",boxShadow:"0 0 8px rgba(245,87,108,.3)"}:{color:"#ccc"})}>
-            <span style={{display:"inline-block",transform:drawEraser?"rotate(180deg)":"none",transition:"transform .2s"}}>✏️</span></button>
+            <span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span></button>
           {["#fff","#f5576c","#feca57","#43e97b","#60a5fa","#f093fb","#fb923c"].map(c=>(
             <div key={c} onClick={()=>{setDrawColor(c);setDrawEraser(false);}} style={{width:24,height:24,borderRadius:6,background:c,border:drawColor===c&&!drawEraser?"2px solid #fff":"2px solid rgba(255,255,255,.1)",cursor:"pointer",opacity:drawEraser?.4:1,transition:"opacity .15s"}}/>))}
           <div style={{flex:1}}/>
@@ -1937,12 +1939,17 @@ const NotebookPanel=()=>{
           <span style={{fontSize:10,opacity:.4,minWidth:28,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
           <button onClick={()=>setPageZoom(z=>Math.min(4,z+0.2))} style={btn({padding:"4px 6px",fontSize:14})}>+</button>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:4,opacity:drawEraser?.35:1,transition:"opacity .15s"}}>
-          {[1,2,3,4,6,8,10,12].map(s=>(<div key={s} onClick={()=>{setDrawSize(s);setDrawEraser(false);}}
+        {drawEraser?<div style={{display:"flex",alignItems:"center",gap:4}}>
+          {[6,10,16,20,28,36,48].map(s=>(<div key={s} onClick={()=>setDrawEraserSize(s)}
+            style={{width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:8,
+              background:drawEraserSize===s?"rgba(245,87,108,.18)":"transparent",border:drawEraserSize===s?"1px solid rgba(245,87,108,.4)":"1px solid transparent",cursor:"pointer"}}>
+            <div style={{width:Math.max(Math.round(s/2.5),3),height:Math.max(Math.round(s/2.5),3),borderRadius:"50%",background:"rgba(245,87,108,.7)"}}/></div>))}
+        </div>:<div style={{display:"flex",alignItems:"center",gap:4}}>
+          {[1,2,3,4,6,8,10,12].map(s=>(<div key={s} onClick={()=>setDrawSize(s)}
             style={{width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:8,
               background:drawSize===s?"rgba(255,255,255,.12)":"transparent",border:drawSize===s?`1px solid ${drawColor}`:"1px solid transparent",cursor:"pointer"}}>
             <div style={{width:Math.max(s,2),height:Math.max(s,2),borderRadius:"50%",background:drawColor}}/></div>))}
-        </div>
+        </div>}
       </div>}
       {!pageDrawMode&&<div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 6px",flexShrink:0}}>
         <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={btn({padding:"4px 8px"})}>−</button>
