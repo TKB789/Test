@@ -1219,7 +1219,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     const ROWS=10,COLS=8,MINES=10;
     const[board,setBoard]=useState(null);const[revealed,setRevealed]=useState(null);const[flagged,setFlagged]=useState(null);
     const[gameOver,setGameOver]=useState(false);const[won,setWon]=useState(false);const[flagMode,setFlagMode]=useState(false);
-    const[best,setBest]=useState(()=>{try{return Number(localStorage.getItem("zo_best_mines","zo_best_lineup"))||0;}catch{return 0;}});
+    const[best,setBest]=useState(()=>{try{return Number(localStorage.getItem("zo_best_mines"))||0;}catch{return 0;}});
     const[startTime,setStartTime]=useState(null);const[elapsed,setElapsed]=useState(0);
     const initBoard=()=>{const b=Array(ROWS).fill(null).map(()=>Array(COLS).fill(0));let placed=0;
       while(placed<MINES){const r=Math.floor(Math.random()*ROWS),c=Math.floor(Math.random()*COLS);if(b[r][c]!==-1){b[r][c]=-1;placed++;}}
@@ -1252,7 +1252,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       while(stack.length){const[cr,cc]=stack.pop();if(cr<0||cr>=ROWS||cc<0||cc>=COLS||rv[cr][cc]||flagged[cr][cc])continue;
         rv[cr][cc]=true;if(board[cr][cc]===0){for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++)stack.push([cr+dr,cc+dc]);}}
       setRevealed(rv);let unrevealed=0;for(let i=0;i<ROWS;i++)for(let j=0;j<COLS;j++)if(!rv[i][j])unrevealed++;
-      if(unrevealed===MINES){setWon(true);if(best===0||elapsed<best){setBest(elapsed);try{localStorage.setItem("zo_best_mines","zo_best_lineup",String(elapsed));}catch{}}}};
+      if(unrevealed===MINES){setWon(true);if(best===0||elapsed<best){setBest(elapsed);try{localStorage.setItem("zo_best_mines",String(elapsed));}catch{}}}};
     const toggleFlag=(r,c)=>{if(!board||gameOver||won||revealed[r][c])return;setFlagged(prev=>{const n=prev.map(r=>[...r]);n[r][c]=!n[r][c];return n;});};
     const handleCell=(r,c)=>{if(flagMode)toggleFlag(r,c);else reveal(r,c);};
     const flagCount=flagged?flagged.flat().filter(Boolean).length:0;
@@ -1456,7 +1456,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
             {id:"bubbles",icon:"🥦",name:"Veggie Garden",desc:"Harvest veggies fast! Avoid mushrooms & poison.",color:"#43e97b",best:"zo_best_bubbles"},
             {id:"breakout",icon:"🍎",name:"Fruit Blocks",desc:"Break up the frozen fruits for a yummy dessert! 🍧",color:"#f5576c",best:"zo_best_breakout"},
             {id:"rhythm",icon:"💕",name:"Memory Matchmaker",desc:"Flip cards and pair up the animals!",color:"#feca57",best:"zo_best_memory",bestLabel:" moves"},
-            {id:"mines",icon:"🍀",name:"Lucky Clovers",desc:"Pick clovers without finding a bomb!",color:"#43e97b",best:"zo_best_mines","zo_best_lineup",bestLabel:"s"},
+            {id:"mines",icon:"🍀",name:"Lucky Clovers",desc:"Pick clovers without finding a bomb!",color:"#43e97b",best:"zo_best_mines",bestLabel:"s"},
             {id:"lineup",icon:"🔮",name:"Zobuddy Lineup",desc:"Guess the secret lineup from clues!",color:"#a78bfa",best:"zo_best_lineup",bestLabel:" guesses"},
           ].map(g=>{
             const b=(()=>{try{return Number(localStorage.getItem(g.best))||0;}catch{return 0;}})();
