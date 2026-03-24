@@ -1299,11 +1299,11 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     const BUDDIES=["🐭","🐮","🐯","🐰","🐲","🐍","🐴","🐐","🐵","🐔","🐶","🐷"];
     const[answer,setAnswer]=useState(null);
     const[guess,setGuess]=useState([null,null,null,null,null]);
-    const[history,setHistory]=useState([]);
     const[won,setWon]=useState(false);
     const[pool,setPool]=useState([]);
-    const[dragIdx,setDragIdx]=useState(null);
     const[best,setBest]=useState(()=>{try{return Number(localStorage.getItem("zo_best_lineup"))||0;}catch{return 0;}});
+    const[attempts,setAttempts]=useState(0);
+    const[lastResult,setLastResult]=useState(null); // number of correct, or null if not checked yet
 
     const initGame=()=>{
       const shuffled=[...BUDDIES].sort(()=>Math.random()-.5);
@@ -1311,8 +1311,9 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       setAnswer(picked);
       setPool([...picked].sort(()=>Math.random()-.5));
       setGuess([null,null,null,null,null]);
-      setHistory([]);
       setWon(false);
+      setAttempts(0);
+      setLastResult(null);
     };
     useEffect(()=>{initGame();},[]);
 
@@ -1320,36 +1321,32 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       if(guess.some(g=>g===null))return;
       let correct=0;
       for(let i=0;i<5;i++)if(guess[i]===answer[i])correct++;
-      const entry={guess:[...guess],correct};
-      const newHistory=[...history,entry];
-      setHistory(newHistory);
+      const newAttempts=attempts+1;
+      setAttempts(newAttempts);
+      setLastResult(correct);
       if(correct===5){
         setWon(true);
-        const attempts=newHistory.length;
-        if(best===0||attempts<best){setBest(attempts);try{localStorage.setItem("zo_best_lineup",String(attempts));}catch{}}
-      } else {
-        setGuess([null,null,null,null,null]);
+        if(best===0||newAttempts<best){setBest(newAttempts);try{localStorage.setItem("zo_best_lineup",String(newAttempts));}catch{}}
       }
     };
 
     const placeInSlot=(slotIdx,buddy)=>{
       setGuess(prev=>{
         const n=[...prev];
-        // Remove buddy from any existing slot
         const existingIdx=n.indexOf(buddy);
         if(existingIdx>=0)n[existingIdx]=null;
-        // If slot already has a buddy, swap or clear
         n[slotIdx]=buddy;
         return n;
       });
+      setLastResult(null); // clear result when rearranging
     };
 
     const removeFromSlot=(slotIdx)=>{
       setGuess(prev=>{const n=[...prev];n[slotIdx]=null;return n;});
+      setLastResult(null);
     };
 
     const availableBuddies=pool.filter(b=>!guess.includes(b));
-    const attempts=history.length;
 
     if(!answer)return null;
 
@@ -1357,9 +1354,9 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       <div style={{fontSize:48,marginBottom:10}}>🎉</div>
       <div style={{fontSize:22,fontWeight:900,color:"#e8e0f0"}}>You Got It!</div>
       <div style={{display:"flex",gap:8,marginTop:12,marginBottom:8}}>{answer.map((b,i)=><span key={i} style={{fontSize:36}}>{b}</span>)}</div>
-      <div style={{fontSize:18,fontWeight:800,color:"#feca57",marginTop:4}}>Solved in {attempts} {attempts===1?"guess":"guesses"}</div>
+      <div style={{fontSize:18,fontWeight:800,color:"#feca57",marginTop:4}}>Solved in {attempts} {attempts===1?"check":"checks"}</div>
       {(best===0||attempts<=best)&&<div style={{fontSize:14,color:"#43e97b",fontWeight:700,marginTop:4}}>🏆 New Best!</div>}
-      {best>0&&attempts>best&&<div style={{fontSize:12,opacity:.5,marginTop:2}}>Best: {best} guesses</div>}
+      {best>0&&attempts>best&&<div style={{fontSize:12,opacity:.5,marginTop:2}}>Best: {best} checks</div>}
       <div style={{display:"flex",gap:8,marginTop:16}}>
         <button onClick={()=>{setGameKey(k=>k+1);}} style={{background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",borderRadius:12,padding:"10px 24px",fontSize:15,fontWeight:700,cursor:"pointer"}}>Play Again</button>
         <button onClick={()=>setGame(null)} style={{background:"rgba(255,255,255,.08)",color:"#ccc",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,padding:"10px 20px",fontSize:15,fontWeight:700,cursor:"pointer"}}>Exit to Menu</button>
@@ -1367,77 +1364,61 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     </div>);
 
     return(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"8px 16px",overflow:"auto"}}>
-      <div style={{textAlign:"center",marginBottom:8}}>
-        <div style={{fontSize:13,opacity:.4}}>Guess the secret lineup! Tap a buddy, then tap a slot.</div>
-        <div style={{fontSize:12,opacity:.3,marginTop:2}}>Attempt {attempts+1}{best>0?` · Best: ${best}`:""}</div>
+      <div style={{textAlign:"center",marginBottom:10}}>
+        <div style={{fontSize:14,fontWeight:700,color:"#e8e0f0"}}>🔮 Guess the Secret Lineup</div>
+        <div style={{fontSize:12,opacity:.35,marginTop:3}}>Place all 5 buddies, then check. Tap a placed buddy to move it back.</div>
+        <div style={{fontSize:12,opacity:.3,marginTop:2}}>Checks: {attempts}{best>0?` · Best: ${best}`:""}</div>
       </div>
 
-      {/* Lineup slots */}
-      <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:12}}>
-        {guess.map((b,i)=>(
-          <div key={i} onClick={()=>{if(b)removeFromSlot(i);else if(dragIdx!==null){placeInSlot(i,dragIdx);setDragIdx(null);}}}
-            style={{width:56,height:64,borderRadius:12,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
-              background:b?"rgba(102,126,234,.15)":"rgba(255,255,255,.04)",
-              border:b?"2px solid rgba(102,126,234,.4)":dragIdx!==null?"2px dashed rgba(102,126,234,.4)":"2px solid rgba(255,255,255,.08)",
-              cursor:"pointer",transition:"all .15s"}}>
-            {b?<span style={{fontSize:30}}>{b}</span>:<span style={{fontSize:14,opacity:.2}}>{i+1}</span>}
-          </div>
-        ))}
+      {/* Result banner */}
+      {lastResult!==null&&<div style={{textAlign:"center",padding:"10px 14px",marginBottom:10,borderRadius:12,
+        background:lastResult>=4?"rgba(67,233,123,.12)":lastResult>=2?"rgba(254,202,87,.1)":"rgba(245,87,108,.08)",
+        border:lastResult>=4?"1px solid rgba(67,233,123,.25)":lastResult>=2?"1px solid rgba(254,202,87,.2)":"1px solid rgba(245,87,108,.15)"}}>
+        <div style={{fontSize:28,fontWeight:900,color:lastResult>=4?"#43e97b":lastResult>=2?"#feca57":"#f5576c"}}>{lastResult} / 5</div>
+        <div style={{fontSize:13,opacity:.6,marginTop:2}}>{lastResult===0?"None in the right spot":lastResult===1?"1 buddy is in the correct position":`${lastResult} buddies are in the correct position`}</div>
+        <div style={{fontSize:11,opacity:.3,marginTop:4}}>Rearrange and check again!</div>
+      </div>}
+
+      {/* Lineup platform */}
+      <div style={{background:"rgba(167,139,250,.06)",border:"1px solid rgba(167,139,250,.15)",borderRadius:14,padding:"12px 8px",marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:700,opacity:.3,textAlign:"center",marginBottom:8,letterSpacing:1}}>LINEUP PLATFORM</div>
+        <div style={{display:"flex",gap:6,justifyContent:"center"}}>
+          {guess.map((b,i)=>(
+            <div key={i} onClick={()=>{if(b)removeFromSlot(i);}}
+              style={{width:56,height:64,borderRadius:12,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+                background:b?"rgba(167,139,250,.15)":"rgba(255,255,255,.03)",
+                border:b?"2px solid rgba(167,139,250,.4)":"2px dashed rgba(255,255,255,.1)",
+                cursor:b?"pointer":"default",transition:"all .15s",position:"relative"}}>
+              {b?<span style={{fontSize:30}}>{b}</span>:<span style={{fontSize:16,opacity:.15}}>{i+1}</span>}
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Available buddies to pick from */}
-      <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:12,flexWrap:"wrap"}}>
-        {availableBuddies.map(b=>(
-          <div key={b} onClick={()=>{
-            if(dragIdx===b){setDragIdx(null);return;}
-            setDragIdx(b);
-            // Auto-place in first empty slot
-            const emptyIdx=guess.indexOf(null);
-            if(emptyIdx>=0){placeInSlot(emptyIdx,b);setDragIdx(null);}
-          }}
-            style={{width:48,height:48,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",
-              background:dragIdx===b?"rgba(254,202,87,.2)":"rgba(255,255,255,.06)",
-              border:dragIdx===b?"2px solid rgba(254,202,87,.5)":"2px solid rgba(255,255,255,.08)",
-              cursor:"pointer",transition:"all .12s"}}>
-            <span style={{fontSize:26}}>{b}</span>
-          </div>
-        ))}
-        {availableBuddies.length===0&&<div style={{fontSize:12,opacity:.3}}>All placed!</div>}
+      {/* Starting area */}
+      <div style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.06)",borderRadius:14,padding:"12px 8px",marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:700,opacity:.3,textAlign:"center",marginBottom:8,letterSpacing:1}}>TAP TO PLACE</div>
+        <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",minHeight:48}}>
+          {availableBuddies.length>0?availableBuddies.map(b=>(
+            <div key={b} onClick={()=>{
+              const emptyIdx=guess.indexOf(null);
+              if(emptyIdx>=0){placeInSlot(emptyIdx,b);}
+            }}
+              style={{width:52,height:52,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",
+                background:"rgba(255,255,255,.06)",border:"2px solid rgba(255,255,255,.1)",
+                cursor:"pointer",transition:"all .12s"}}>
+              <span style={{fontSize:28}}>{b}</span>
+            </div>
+          )):<div style={{fontSize:12,opacity:.25,padding:"12px 0"}}>All buddies placed on platform</div>}
+        </div>
       </div>
 
-      {/* Submit button */}
-      <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:14}}>
+      {/* Check button */}
+      <div style={{display:"flex",gap:8,justifyContent:"center"}}>
         <button onClick={checkGuess} disabled={guess.some(g=>g===null)}
           style={{background:guess.some(g=>g===null)?"rgba(255,255,255,.04)":"linear-gradient(135deg,#667eea,#764ba2)",
-            color:guess.some(g=>g===null)?"#555":"#fff",border:"none",borderRadius:12,padding:"10px 28px",fontSize:15,fontWeight:700,cursor:guess.some(g=>g===null)?"default":"pointer"}}>Check Lineup</button>
-        <button onClick={()=>setGuess([null,null,null,null,null])}
-          style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.08)",borderRadius:12,padding:"10px 16px",fontSize:14,fontWeight:700,color:"#888",cursor:"pointer"}}>Clear</button>
-      </div>
-
-      {/* History */}
-      {history.length>0&&<div style={{fontSize:13,fontWeight:800,opacity:.4,marginBottom:6}}>PREVIOUS GUESSES</div>}
-      <div style={{flex:1,overflowY:"auto"}}>
-        {[...history].reverse().map((h,hi)=>{
-          const attemptNum=history.length-hi;
-          return(<div key={hi} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",marginBottom:4,borderRadius:10,
-            background:h.correct===5?"rgba(67,233,123,.1)":"rgba(255,255,255,.03)",border:h.correct===5?"1px solid rgba(67,233,123,.2)":"1px solid rgba(255,255,255,.06)"}}>
-            <span style={{fontSize:11,fontWeight:800,color:"rgba(102,126,234,.5)",minWidth:20}}>#{attemptNum}</span>
-            <div style={{display:"flex",gap:4,flex:1}}>
-              {h.guess.map((b,i)=>{
-                const isCorrect=b===answer[i];
-                return(<div key={i} style={{width:36,height:36,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",
-                  background:isCorrect?"rgba(67,233,123,.15)":"rgba(255,255,255,.04)",
-                  border:isCorrect?"1px solid rgba(67,233,123,.3)":"1px solid rgba(255,255,255,.06)"}}>
-                  <span style={{fontSize:20}}>{b}</span>
-                </div>);
-              })}
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-              <span style={{fontSize:14,fontWeight:800,color:h.correct>=4?"#43e97b":h.correct>=2?"#feca57":"#f5576c"}}>{h.correct}</span>
-              <span style={{fontSize:11,opacity:.4}}>/ 5</span>
-            </div>
-          </div>);
-        })}
+            color:guess.some(g=>g===null)?"#555":"#fff",border:"none",borderRadius:12,padding:"12px 32px",fontSize:16,fontWeight:800,cursor:guess.some(g=>g===null)?"default":"pointer"}}>
+          {lastResult!==null?"Check Again":"Check Lineup"}</button>
       </div>
     </div>);
   };
