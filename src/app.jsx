@@ -1574,7 +1574,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
         <div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg,#667eea,#764ba2)",width:`${((step+1)/TOTAL_ROUNDS)*100}%`,transition:"width .3s"}}/>
       </div>
 
-      {/* 3x3 Grid */}
+      {/* 3x3 Grid - fixed position */}
       <div style={{display:"flex",justifyContent:"center",alignItems:"center",flex:1}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,width:"min(70vw,240px)",aspectRatio:"1"}}>
           {Array.from({length:9},(_,i)=>{
@@ -1589,9 +1589,11 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
         </div>
       </div>
 
-      {/* Feedback flash */}
-      {feedbackMsg&&<div style={{textAlign:"center",fontSize:20,fontWeight:900,padding:4,flexShrink:0,
-        color:feedbackMsg==="✓"?"#43e97b":feedbackMsg==="½"?"#feca57":"#f5576c"}}>{feedbackMsg}</div>}
+      {/* Feedback flash - fixed height so grid doesn't shift */}
+      <div style={{height:32,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        {feedbackMsg&&<div style={{fontSize:20,fontWeight:900,
+          color:feedbackMsg==="✓"?"#43e97b":feedbackMsg==="½"?"#feca57":"#f5576c"}}>{feedbackMsg}</div>}
+      </div>
 
       {/* Response buttons - thumb-friendly at bottom */}
       <div style={{display:"flex",gap:12,padding:"12px 8px 16px",flexShrink:0,justifyContent:"center"}}>
