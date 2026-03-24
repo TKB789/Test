@@ -1600,24 +1600,24 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
           color:feedbackMsg==="✓"?"#43e97b":feedbackMsg==="½"?"#feca57":"#f5576c"}}>{feedbackMsg}</span>}
       </div>
 
-      {/* Response buttons - thumb-friendly at bottom, always same size */}
-      <div style={{display:"flex",gap:12,padding:"8px 8px 16px",flexShrink:0,justifyContent:"center"}}>
-        <button onClick={()=>{if(canRespond)setPosMatch(p=>!p);}}
+      {/* Response buttons - thumb-friendly, simultaneous press via onPointerDown */}
+      <div style={{display:"flex",gap:12,padding:"8px 8px 16px",flexShrink:0,justifyContent:"center",touchAction:"manipulation"}}>
+        <button onPointerDown={(e)=>{e.preventDefault();if(canRespond)setPosMatch(p=>!p);}}
           style={{flex:1,maxWidth:160,padding:"16px 8px",borderRadius:14,fontSize:15,fontWeight:800,cursor:canRespond?"pointer":"default",
             background:posMatch?"rgba(96,165,250,.25)":"rgba(255,255,255,.04)",
             border:posMatch?"2px solid rgba(96,165,250,.6)":"2px solid rgba(255,255,255,.08)",
             color:posMatch?"#60a5fa":"rgba(255,255,255,.4)",
             boxShadow:posMatch?"0 0 12px rgba(96,165,250,.3)":"none",
-            opacity:canRespond?1:.3,transition:"all .12s"}}>
+            opacity:canRespond?1:.3,transition:"all .12s",touchAction:"manipulation",userSelect:"none",WebkitUserSelect:"none"}}>
           📍 Position<br/><span style={{fontSize:11,fontWeight:600,opacity:.6}}>Match</span>
         </button>
-        <button onClick={()=>{if(canRespond)setLetMatch(p=>!p);}}
+        <button onPointerDown={(e)=>{e.preventDefault();if(canRespond)setLetMatch(p=>!p);}}
           style={{flex:1,maxWidth:160,padding:"16px 8px",borderRadius:14,fontSize:15,fontWeight:800,cursor:canRespond?"pointer":"default",
             background:letMatch?"rgba(240,147,251,.25)":"rgba(255,255,255,.04)",
             border:letMatch?"2px solid rgba(240,147,251,.6)":"2px solid rgba(255,255,255,.08)",
             color:letMatch?"#f093fb":"rgba(255,255,255,.4)",
             boxShadow:letMatch?"0 0 12px rgba(240,147,251,.3)":"none",
-            opacity:canRespond?1:.3,transition:"all .12s"}}>
+            opacity:canRespond?1:.3,transition:"all .12s",touchAction:"manipulation",userSelect:"none",WebkitUserSelect:"none"}}>
           🔤 Letter<br/><span style={{fontSize:11,fontWeight:600,opacity:.6}}>Match</span>
         </button>
       </div>
