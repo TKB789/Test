@@ -1373,36 +1373,16 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       if(emptyPool>=0)moveBuddy(buddy,"platform",idx,"pool",emptyPool);
     };
 
-    // All touch handling on container - find which buddy was touched by position
-    const findTouchedBuddy=(x,y)=>{
-      // Check pool first (starting area) then platform — pool is lower so user more likely dragging from there
-      for(let i=0;i<5;i++){
-        const el2=poolRefs.current[i];if(el2){const r=el2.getBoundingClientRect();
-          if(x>=r.left-4&&x<=r.right+4&&y>=r.top-4&&y<=r.bottom+4&&poolSlotsRef.current[i])return{buddy:poolSlotsRef.current[i],fromArea:"pool",fromIdx:i};}
-      }
-      for(let i=0;i<5;i++){
-        const el=platRefs.current[i];if(el){const r=el.getBoundingClientRect();
-          if(x>=r.left-4&&x<=r.right+4&&y>=r.top-4&&y<=r.bottom+4&&guessRef.current[i])return{buddy:guessRef.current[i],fromArea:"platform",fromIdx:i};}
-      }
-      return null;
+    // Touch: start on individual elements, move/end on document (survives re-renders)
+    const touchFnsRef=React.useRef({});
+    touchFnsRef.current={findPlatSlotAt,findPoolSlotAt,moveBuddy,tapFromPool,tapFromPlatform};
+    const onBuddyTouchStart=(buddy,fromArea,fromIdx)=>(e)=>{
+      if(!buddy)return;
+      e.preventDefault();e.stopPropagation();
+      const t=e.touches[0];
+      dragRef.current={buddy,fromArea,fromIdx,x:t.clientX,y:t.clientY,startX:t.clientX,startY:t.clientY,isDrag:false};
     };
-    const gameContainerRef=React.useRef(null);
-    const touchHandlersRef=React.useRef({});
-    touchHandlersRef.current={findTouchedBuddy,findPlatSlotAt,findPoolSlotAt,moveBuddy,tapFromPool,tapFromPlatform};
-    const gameContainerCallbackRef=React.useCallback((node)=>{
-      // Cleanup old
-      if(gameContainerRef.current&&gameContainerRef.current._cleanupTouch){
-        gameContainerRef.current._cleanupTouch();
-      }
-      gameContainerRef.current=node;
-      if(!node)return;
-      const onTS=(e)=>{
-        const t=e.touches[0];
-        const hit=touchHandlersRef.current.findTouchedBuddy(t.clientX,t.clientY);
-        if(!hit)return;
-        e.preventDefault();e.stopPropagation();
-        dragRef.current={...hit,x:t.clientX,y:t.clientY,startX:t.clientX,startY:t.clientY,isDrag:false};
-      };
+    useEffect(()=>{
       const onTM=(e)=>{
         if(!dragRef.current)return;e.preventDefault();
         const t=e.touches[0];
@@ -1414,7 +1394,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       const onTE=(e)=>{
         if(!dragRef.current)return;
         const d=dragRef.current;const t=e.changedTouches[0];
-        const h=touchHandlersRef.current;
+        const h=touchFnsRef.current;
         if(!d.isDrag){
           if(d.fromArea==="pool")h.tapFromPool(d.fromIdx);
           else h.tapFromPlatform(d.fromIdx);
@@ -1426,10 +1406,9 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
         }
         dragRef.current=null;setDragging(null);
       };
-      node.addEventListener("touchstart",onTS,{passive:false});
-      node.addEventListener("touchmove",onTM,{passive:false});
-      node.addEventListener("touchend",onTE);
-      node._cleanupTouch=()=>{node.removeEventListener("touchstart",onTS);node.removeEventListener("touchmove",onTM);node.removeEventListener("touchend",onTE);};
+      document.addEventListener("touchmove",onTM,{passive:false});
+      document.addEventListener("touchend",onTE);
+      return()=>{document.removeEventListener("touchmove",onTM);document.removeEventListener("touchend",onTE);};
     },[]);
 
     if(!answer)return null;
@@ -1467,7 +1446,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     const hoverPool=dragging&&dragging.isDrag?findPoolSlotAt(dragging.x,dragging.y):-1;
 
     return(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"8px 16px",overflow:"hidden",touchAction:"none",userSelect:"none",WebkitUserSelect:"none"}}
-      ref={gameContainerCallbackRef}>
+      >
       {/* Fixed game area */}
       <div style={{flexShrink:0}}>
         <div style={{textAlign:"center",marginBottom:8}}>
@@ -1513,7 +1492,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
             {poolSlots.map((b,i)=>{
               const isHover=hoverPool===i;const isDrag=isDraggingFrom("pool",i);
               return(<div key={"s"+i} ref={el=>poolRefs.current[i]=el}
-                
+                onTouchStart={b?onBuddyTouchStart(b,"pool",i):undefined}
                 style={{width:52,height:56,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",
                   background:isHover?"rgba(255,255,255,.1)":b?"rgba(255,255,255,.06)":"transparent",
                   border:isHover?"2px solid rgba(255,255,255,.3)":b?"2px solid rgba(255,255,255,.1)":"2px solid transparent",
