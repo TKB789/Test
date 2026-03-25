@@ -2608,16 +2608,21 @@ const LearnPanel=()=>{
   const isCourseFav=(c)=>learnFavs.courses.some(x=>x.name===c.name);
   const totalFavs=Object.values(learnFavs).reduce((s,a)=>s+(Array.isArray(a)?a.length:0),0);
 
-  // News sources - custom + default
-  const DEFAULT_NEWS=[{name:"AP News",url:"https://apnews.com",icon:"🔵",color:"#60a5fa"},{name:"Reuters",url:"https://reuters.com",icon:"🟠",color:"#fb923c"},{name:"NPR",url:"https://npr.org/sections/news",icon:"🔴",color:"#f5576c"},{name:"BBC News",url:"https://bbc.com/news",icon:"⚪",color:"#e8e0f0"},{name:"The Guardian",url:"https://theguardian.com/international",icon:"🔵",color:"#38bdf8"},{name:"PBS NewsHour",url:"https://pbs.org/newshour",icon:"🟣",color:"#a78bfa"}];
+  // Fave Sites - custom + default
+  const DEFAULT_NEWS=[{name:"AP News",url:"https://apnews.com",icon:"🔵",color:"#60a5fa",cat:"News"},{name:"Reuters",url:"https://reuters.com",icon:"🟠",color:"#fb923c",cat:"News"},{name:"NPR",url:"https://npr.org/sections/news",icon:"🔴",color:"#f5576c",cat:"News"},{name:"BBC News",url:"https://bbc.com/news",icon:"⚪",color:"#e8e0f0",cat:"News"},{name:"The Guardian",url:"https://theguardian.com/international",icon:"🔵",color:"#38bdf8",cat:"News"},{name:"PBS NewsHour",url:"https://pbs.org/newshour",icon:"🟣",color:"#a78bfa",cat:"News"}];
   const[newsSources,setNewsSources]=useState(()=>{try{return JSON.parse(localStorage.getItem("zodibuddy_news_v1"))||DEFAULT_NEWS;}catch{return DEFAULT_NEWS;}});
   const[showAddNews,setShowAddNews]=useState(false);
   const[newNewsName,setNewNewsName]=useState("");
   const[newNewsUrl,setNewNewsUrl]=useState("");
+  const[newNewsCat,setNewNewsCat]=useState("");
+  const[sitesCatFilter,setSitesCatFilter]=useState("all");
+  const siteCategories=useMemo(()=>{const cats=new Set();newsSources.forEach(s=>{if(s.cat)cats.add(s.cat);});return["all",...Array.from(cats).sort()];},[newsSources]);
+  const filteredSites=useMemo(()=>sitesCatFilter==="all"?newsSources:newsSources.filter(s=>s.cat===sitesCatFilter),[newsSources,sitesCatFilter]);
   const saveNewsSources=(s)=>{setNewsSources(s);try{localStorage.setItem("zodibuddy_news_v1",JSON.stringify(s));}catch{}};
   const addNewsSource=()=>{if(!newNewsName.trim()||!newNewsUrl.trim())return;
     const url=newNewsUrl.trim().startsWith("http")?newNewsUrl.trim():"https://"+newNewsUrl.trim();
-    saveNewsSources([...newsSources,{name:newNewsName.trim(),url,icon:"🌐",color:"#a8b4f0",custom:true}]);setNewNewsName("");setNewNewsUrl("");setShowAddNews(false);};
+    const cat=newNewsCat.trim()||"Other";
+    saveNewsSources([...newsSources,{name:newNewsName.trim(),url,icon:"🌐",color:"#a8b4f0",cat,custom:true}]);setNewNewsName("");setNewNewsUrl("");setNewNewsCat("");setShowAddNews(false);};
   const deleteNewsSource=(i)=>{if(!confirm(`Remove "${newsSources[i].name}"?`))return;saveNewsSources(newsSources.filter((_,j)=>j!==i));};
 
   // Flashcard state
@@ -2690,7 +2695,7 @@ const LearnPanel=()=>{
         </div>
       </div>}
       <div style={{display:"flex",gap:3,padding:"8px 12px 8px",flexShrink:0}}>
-        {[{id:"picks",label:"🌱 Picks"},{id:"news",label:"📰 Events"},{id:"flash",label:"📒 Flashcards"}].map(t=>(
+        {[{id:"picks",label:"🌱 Picks"},{id:"news",label:"⭐ Fave Sites"},{id:"flash",label:"📒 Flashcards"}].map(t=>(
           <button key={t.id} onClick={()=>setLearnTab(t.id)}
             style={{flex:1,padding:"7px 2px",borderRadius:10,border:learnTab===t.id?"1px solid rgba(102,126,234,.4)":"1px solid rgba(255,255,255,.06)",
               background:learnTab===t.id?"rgba(102,126,234,.12)":"rgba(255,255,255,.03)",
@@ -2715,31 +2720,38 @@ const LearnPanel=()=>{
       </div>}
       {learnTab==="news"&&<div style={{flex:1,overflowY:"auto",padding:"0 14px 14px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-          <div style={{fontSize:14,opacity:.4}}>Tap any source to read</div>
-          <button onClick={()=>setShowAddNews(!showAddNews)} style={{background:showAddNews?"rgba(102,126,234,.15)":"rgba(255,255,255,.06)",border:showAddNews?"1px solid rgba(102,126,234,.3)":"1px solid rgba(255,255,255,.08)",borderRadius:8,padding:"4px 10px",fontSize:12,color:showAddNews?"#a8b4f0":"#888",cursor:"pointer",fontWeight:700}}>{showAddNews?"Cancel":"+ Add Source"}</button>
+          <div style={{fontSize:14,opacity:.4}}>Tap any site to visit</div>
+          <button onClick={()=>setShowAddNews(!showAddNews)} style={{background:showAddNews?"rgba(102,126,234,.15)":"rgba(255,255,255,.06)",border:showAddNews?"1px solid rgba(102,126,234,.3)":"1px solid rgba(255,255,255,.08)",borderRadius:8,padding:"4px 10px",fontSize:12,color:showAddNews?"#a8b4f0":"#888",cursor:"pointer",fontWeight:700}}>{showAddNews?"Cancel":"+ Add Site"}</button>
         </div>
         {showAddNews&&<div style={{background:"rgba(102,126,234,.06)",border:"1px solid rgba(102,126,234,.15)",borderRadius:12,padding:"10px 12px",marginBottom:10}}>
-          <input value={newNewsName} onChange={e=>setNewNewsName(e.target.value)} placeholder="Source name (e.g. CNN)" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid rgba(255,255,255,.08)",background:"rgba(255,255,255,.04)",color:"#e8e0f0",fontSize:14,outline:"none",marginBottom:6}}/>
-          <input value={newNewsUrl} onChange={e=>setNewNewsUrl(e.target.value)} placeholder="URL (e.g. cnn.com)" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid rgba(255,255,255,.08)",background:"rgba(255,255,255,.04)",color:"#e8e0f0",fontSize:14,outline:"none",marginBottom:8}}/>
-          <button onClick={addNewsSource} style={{width:"100%",background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",borderRadius:10,padding:"8px",fontSize:14,fontWeight:700,cursor:"pointer"}}>Add Source</button>
+          <input value={newNewsName} onChange={e=>setNewNewsName(e.target.value)} placeholder="Site name (e.g. CNN)" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid rgba(255,255,255,.08)",background:"rgba(255,255,255,.04)",color:"#e8e0f0",fontSize:14,outline:"none",marginBottom:6}}/>
+          <input value={newNewsUrl} onChange={e=>setNewNewsUrl(e.target.value)} placeholder="URL (e.g. cnn.com)" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid rgba(255,255,255,.08)",background:"rgba(255,255,255,.04)",color:"#e8e0f0",fontSize:14,outline:"none",marginBottom:6}}/>
+          <div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center"}}><span style={{fontSize:12,opacity:.4}}>Category:</span>
+            <input value={newNewsCat} onChange={e=>setNewNewsCat(e.target.value)} placeholder="e.g. News, Tech, Sports" list="site-cats" style={{flex:1,padding:"8px 10px",borderRadius:8,border:"1px solid rgba(255,255,255,.08)",background:"rgba(255,255,255,.04)",color:"#e8e0f0",fontSize:14,outline:"none"}}/>
+            <datalist id="site-cats">{siteCategories.filter(c=>c!=="all").map(c=><option key={c} value={c}/>)}</datalist></div>
+          <button onClick={addNewsSource} style={{width:"100%",background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",borderRadius:10,padding:"8px",fontSize:14,fontWeight:700,cursor:"pointer"}}>Add Site</button>
         </div>}
-        {newsSources.map((s,i)=>{
+        {siteCategories.length>1&&<div style={{display:"flex",gap:3,marginBottom:8,overflowX:"auto"}}>
+          {siteCategories.map(cat=>(<button key={cat} onClick={()=>setSitesCatFilter(cat)} style={{padding:"4px 10px",borderRadius:6,border:sitesCatFilter===cat?"1px solid rgba(102,126,234,.4)":"1px solid rgba(255,255,255,.06)",background:sitesCatFilter===cat?"rgba(102,126,234,.12)":"rgba(255,255,255,.02)",color:sitesCatFilter===cat?"#a8b4f0":"#666",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>{cat==="all"?"All":cat}</button>))}
+        </div>}
+        {filteredSites.map((s,i)=>{
+          const realIdx=newsSources.indexOf(s);
           const isFav=isSimpleFav("news",x=>x.name===s.name);
           return(<div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
             <a href={s.url} target="_blank" rel="noopener noreferrer"
               style={{flex:1,display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:14,
                 background:`${s.color}08`,border:`1px solid ${s.color}20`,textDecoration:"none",color:"#fff",cursor:"pointer"}}>
               <span style={{fontSize:22}}>{s.icon}</span>
-              <div style={{flex:1}}><div style={{fontSize:15,fontWeight:800}}>{s.name}</div></div>
+              <div style={{flex:1}}><div style={{fontSize:15,fontWeight:800}}>{s.name}</div>{s.cat&&<div style={{fontSize:11,opacity:.35,marginTop:1}}>{s.cat}</div>}</div>
               <span style={{fontSize:14,opacity:.3}}>↗</span>
             </a>
             <button onClick={(e)=>{e.stopPropagation();toggleSimpleFav("news",{name:s.name,url:s.url,icon:s.icon},x=>x.name===s.name);}}
               style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:"4px",opacity:isFav?1:.3}}>{isFav?"⭐":"☆"}</button>
-            <button onClick={(e)=>{e.stopPropagation();deleteNewsSource(i);}}
+            <button onClick={(e)=>{e.stopPropagation();deleteNewsSource(realIdx);}}
               style={{background:"none",border:"none",fontSize:14,cursor:"pointer",padding:"4px",color:"#f5576c",opacity:.4}}>✕</button>
           </div>);
         })}
-        {newsSources.length===0&&<div style={{textAlign:"center",opacity:.3,padding:20}}>No sources. Add one above!</div>}
+        {filteredSites.length===0&&<div style={{textAlign:"center",opacity:.3,padding:20}}>{newsSources.length===0?"No sites yet. Add one above!":"No sites in this category."}</div>}
       </div>}
       {learnTab==="flash"&&<div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{display:"flex",gap:4,padding:"0 14px 6px",flexShrink:0}}>
