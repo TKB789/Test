@@ -6100,23 +6100,21 @@ const NotebookPanel=()=>{
     const preset=PIXEL_SIZES.find(s=>s.id===ps);if(preset)return preset;
     const m=ps.match(/^(\d+)x(\d+)$/);if(m)return{id:ps,label:`${m[1]}×${m[2]}`,desc:"Custom",c:Number(m[1]),r:Number(m[2])};
     return PIXEL_SIZES[1];};
-  const getPixelCellSize=()=>{const dims=getPixelDims();return Math.max(2,Math.min(20,Math.floor(400/Math.max(dims.c,dims.r))));};
+  const getPixelCellSize=()=>{const dims=getPixelDims();return Math.max(4,Math.min(20,Math.floor(400/Math.max(dims.c,dims.r))));};
   const getColorNum=(hex)=>{if(!hex)return"";const h=hex.toLowerCase();const p=PIXEL_PALETTE.find(p=>p.c===h);return p?String(p.n):(pixCustomLabels[h]||"");};
   const drawPixelGrid=()=>{const c=pixCanvasRef.current;if(!c)return;const ctx=c.getContext("2d");
     const dims=getPixelDims();const cs=getPixelCellSize();const pixels=getPixels();
-    // Background = cell gap color (dark gray)
-    ctx.fillStyle="#333";ctx.fillRect(0,0,c.width,c.height);
-    // Section borders: draw black strips first (wider gap)
-    if(pixelGridLines>0){ctx.fillStyle="#000";
-      for(let x=0;x<=dims.c;x+=pixelGridLines)ctx.fillRect(x*cs-1,0,3,dims.r*cs);
-      for(let y=0;y<=dims.r;y+=pixelGridLines)ctx.fillRect(0,y*cs-1,dims.c*cs,3);}
-    // Draw pixels with 1px gap (the gray background shows through as the grid)
-    const gap=cs>=6?1:0;
-    Object.entries(pixels).forEach(([key,color])=>{const[r,cl]=key.split("-").map(Number);
-      if(r<dims.r&&cl<dims.c){ctx.fillStyle=color;ctx.fillRect(cl*cs+gap,r*cs+gap,cs-gap*2,cs-gap*2);}});
-    // Empty cells: fill with dark background so they don't show as gray
+    // Always leave 1px gap — background color IS the grid
+    ctx.fillStyle="#444";ctx.fillRect(0,0,c.width,c.height);
+    // Section borders: black strips (before pixels so pixels don't cover them)
+    if(pixelGridLines>0){ctx.fillStyle="#000";const sw=cs>=8?2:1;
+      for(let x=pixelGridLines;x<dims.c;x+=pixelGridLines)for(let y=0;y<dims.r;y++)ctx.fillRect(x*cs-sw,y*cs,sw*2+1,cs);
+      for(let y=pixelGridLines;y<dims.r;y+=pixelGridLines)for(let x=0;x<dims.c;x++)ctx.fillRect(x*cs,y*cs-sw,cs,sw*2+1);}
+    // Draw all cells — pixels get their color, empty cells get dark bg
     for(let r=0;r<dims.r;r++)for(let cl=0;cl<dims.c;cl++){
-      const key=`${r}-${cl}`;if(!pixels[key]){ctx.fillStyle="#111";ctx.fillRect(cl*cs+gap,r*cs+gap,cs-gap*2,cs-gap*2);}}
+      const key=`${r}-${cl}`;const color=pixels[key];
+      ctx.fillStyle=color||"#181818";
+      ctx.fillRect(cl*cs+1,r*cs+1,cs-2,cs-2);}
     // Number overlay
     if(showPixNumbers&&cs>=8){ctx.textAlign="center";ctx.textBaseline="middle";
       const fs=Math.max(5,Math.min(cs-3,11));ctx.font=`bold ${fs}px sans-serif`;
@@ -6329,8 +6327,6 @@ const NotebookPanel=()=>{
             <button onClick={()=>hasNext&&goNext()} style={{background:"none",border:"none",fontSize:16,color:hasNext?"#a8b4f0":"#333",cursor:hasNext?"pointer":"default",padding:"4px"}}>▶</button>
           </div>
         <button onClick={doSave} style={btn(saved?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b"}:{color:"#aaa"})}>{saved?"Saved ✓":"Save"}</button>
-        <button onClick={archiveCurrentPage} style={btn({color:"#888",padding:"6px 6px",fontSize:12})}>🗃️</button>
-        <button onClick={deleteCurrentPage} style={btn({color:"#888",padding:"6px 6px",fontSize:12})}>🗑️</button>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 6px",flexShrink:0,flexWrap:"wrap"}}>
         <button onClick={()=>setPixelEraser(e=>!e)} style={btn(pixelEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",boxShadow:"0 0 8px rgba(245,87,108,.3)"}:{color:"#ccc"})}>
@@ -6340,9 +6336,11 @@ const NotebookPanel=()=>{
         <span style={{fontSize:11,opacity:.4,minWidth:32,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
         <button onClick={()=>setPageZoom(z=>Math.min(6,z+0.2))} style={btn({padding:"4px 8px"})}>+</button>
         <div style={{width:1,height:20,background:"rgba(255,255,255,.1)",margin:"0 2px"}}/>
-        {/* Color swatches — show first 12, tap picker for all 36 */}
         {PIXEL_COLORS.slice(0,12).map(c=>(<div key={c} onClick={()=>{setPixelColor(c);setPixelEraser(false);}} style={{width:20,height:20,borderRadius:4,background:c,border:pixelColor===c&&!pixelEraser?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer",opacity:pixelEraser?.4:1}}/>))}
         <button onClick={()=>setShowPixPicker(v=>!v)} style={btn({padding:"4px 6px",fontSize:11,color:showPixPicker?"#feca57":"#888"})}>🎨</button>
+        <div style={{flex:1}}/>
+        <button onClick={archiveCurrentPage} style={btn({color:"#888",padding:"4px 6px",fontSize:11})}>🗃️</button>
+        <button onClick={deleteCurrentPage} style={btn({color:"#888",padding:"4px 6px",fontSize:11})}>🗑️</button>
       </div>
       {/* Full 36-color picker */}
       {showPixPicker&&<div style={{padding:"4px 10px 6px",flexShrink:0}}>
@@ -6411,9 +6409,19 @@ const NotebookPanel=()=>{
         {!pageDrawMode&&page.type!=="pixel"&&<button onClick={handleCheckbox} style={btn({color:"#aaa",padding:"6px 8px"})}>☑</button>}
         <button onClick={()=>{saveAll();if(!pageDrawMode){setPageZoom(1);}setPageDrawMode(m=>!m);}} style={btn(pageDrawMode?{background:"rgba(240,147,251,.2)",border:"1px solid rgba(240,147,251,.4)",color:"#f093fb"}:{color:"#aaa"})}>{pageDrawMode?"🔡":"🎨"}</button>
         <button onClick={doSave} style={btn(saved?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b"}:{color:"#aaa"})}>{saved?"Saved ✓":"Save"}</button>
-        <button onClick={archiveCurrentPage} style={btn({color:"#888",padding:"6px 6px",fontSize:12})}>🗃️</button>
-        <button onClick={deleteCurrentPage} style={btn({color:"#888",padding:"6px 6px",fontSize:12})}>🗑️</button>
       </div>
+      {/* Second row: page type, zoom, archive/delete */}
+      {!pageDrawMode&&<div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 6px",flexShrink:0,flexWrap:"wrap"}}>
+        {[{id:"lined",l:"📝"},{id:"blank",l:"📄"},{id:"square",l:"🔲"},{id:"hex",l:"⬡"}].map(t=>(
+          <button key={t.id} onClick={()=>switchPageType(t.id)} style={{padding:"3px 6px",borderRadius:6,fontSize:12,border:page.type===t.id?"1px solid rgba(102,126,234,.5)":"1px solid rgba(255,255,255,.06)",background:page.type===t.id?"rgba(102,126,234,.15)":"transparent",color:page.type===t.id?"#a8b4f0":"#666",cursor:"pointer"}}>{t.l}</button>))}
+        <div style={{flex:1}}/>
+        <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={btn({padding:"4px 8px"})}>−</button>
+        <span style={{fontSize:11,opacity:.4}}>{Math.round(pageZoom*100)}%</span>
+        <button onClick={()=>setPageZoom(z=>Math.min(4,z+0.2))} style={btn({padding:"4px 8px"})}>+</button>
+        <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
+        <button onClick={archiveCurrentPage} style={btn({color:"#888",padding:"4px 6px",fontSize:11})}>🗃️</button>
+        <button onClick={deleteCurrentPage} style={btn({color:"#888",padding:"4px 6px",fontSize:11})}>🗑️</button>
+      </div>}
       {pageDrawMode&&<div style={{display:"flex",flexDirection:"column",gap:4,padding:"2px 10px 6px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:5}}>
           <button onClick={()=>setDrawEraser(e=>!e)} style={btn(drawEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",boxShadow:"0 0 8px rgba(245,87,108,.3)"}:{color:"#ccc"})}>
@@ -6436,14 +6444,6 @@ const NotebookPanel=()=>{
               background:drawSize===s?"rgba(255,255,255,.12)":"transparent",border:drawSize===s?`1px solid ${drawColor}`:"1px solid transparent",cursor:"pointer"}}>
             <div style={{width:Math.max(s,2),height:Math.max(s,2),borderRadius:"50%",background:drawColor}}/></div>))}
         </div>}
-      </div>}
-      {!pageDrawMode&&<div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 6px",flexShrink:0,flexWrap:"wrap"}}>
-        {[{id:"lined",l:"📝"},{id:"blank",l:"📄"},{id:"square",l:"🔲"},{id:"hex",l:"⬡"}].map(t=>(
-          <button key={t.id} onClick={()=>switchPageType(t.id)} style={{padding:"3px 6px",borderRadius:6,fontSize:12,border:page.type===t.id?"1px solid rgba(102,126,234,.5)":"1px solid rgba(255,255,255,.06)",background:page.type===t.id?"rgba(102,126,234,.15)":"transparent",color:page.type===t.id?"#a8b4f0":"#666",cursor:"pointer"}}>{t.l}</button>))}
-        <div style={{flex:1}}/>
-        <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={btn({padding:"4px 8px"})}>−</button>
-        <span style={{fontSize:11,opacity:.4}}>{Math.round(pageZoom*100)}%</span>
-        <button onClick={()=>setPageZoom(z=>Math.min(4,z+0.2))} style={btn({padding:"4px 8px"})}>+</button>
       </div>}
       <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch"}}>
         <div style={{transform:pageDrawMode?undefined:`scale(${pageZoom})`,transformOrigin:"top left",width:pageDrawMode?undefined:`${100/pageZoom}%`}}>
