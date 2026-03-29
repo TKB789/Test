@@ -8534,6 +8534,7 @@ const NotebookPanel=()=>{
   // Toggle checkbox on a specific line: [ ] ↔ [x], and force re-render
   const[cbTick,setCbTick]=useState(0);
   const[checklistView,setChecklistView]=useState(false);
+  const[clNewItem,setClNewItem]=useState("");
   const toggleInlineCheckbox=(lineIdx)=>{
     const content=textRef.current||"";
     const lines=content.split("\n");
@@ -8825,12 +8826,11 @@ const NotebookPanel=()=>{
           :<span onClick={startRename} style={{fontSize:11,fontWeight:800,color:"#e8e0f0",cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:120}}>{nbPageIdx+1}. {page.title||"Untitled"}</span>}
           <button onClick={()=>hasNext&&goNext()} style={{background:"none",border:"none",fontSize:16,color:hasNext?"#a8b4f0":"#333",cursor:hasNext?"pointer":"default",padding:"4px"}}>▶</button>
         </div>
-        {!pageDrawMode&&page.type!=="pixel"&&<button onClick={()=>{
-          const content=textRef.current||"";const hasBoxes=content.includes("[ ] ")||content.includes("[x] ");
-          if(checklistView){setChecklistView(false);}
-          else if(hasBoxes){setChecklistView(true);}
-          else{insertCheckbox();}
-        }} style={btn(checklistView?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b",padding:"6px 8px"}:{color:"#aaa",padding:"6px 8px"})}>☑</button>}
+        {!pageDrawMode&&page.type!=="pixel"&&!checklistView&&<button onClick={insertCheckbox} style={btn({color:"#aaa",padding:"6px 8px"})} title="Insert checkbox">☑</button>}
+        {!pageDrawMode&&page.type!=="pixel"&&(()=>{const content=textRef.current||"";const hasBoxes=content.includes("[ ] ")||content.includes("[x] ");
+          if(!hasBoxes)return null;
+          return <button onClick={()=>setChecklistView(v=>!v)} style={btn(checklistView?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b",padding:"6px 8px"}:{color:"#aaa",padding:"6px 8px"})} title={checklistView?"Edit text":"List view"}>{checklistView?"📝":"📋"}</button>;
+        })()}
         <button onClick={()=>{saveAll();if(!pageDrawMode){setPageZoom(1);}setPageDrawMode(m=>!m);}} style={btn(pageDrawMode?{background:"rgba(240,147,251,.2)",border:"1px solid rgba(240,147,251,.4)",color:"#f093fb"}:{color:"#aaa"})}>{pageDrawMode?"🔡":"🎨"}</button>
         <button onClick={doSave} style={btn(saved?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b"}:{color:"#aaa"})}>{saved?"Saved ✓":"Save"}</button>
       </div>
@@ -8869,16 +8869,26 @@ const NotebookPanel=()=>{
               {existingDraw&&<img src={existingDraw} style={{position:"absolute",top:0,left:0,width:"100%",height:800,pointerEvents:"none",opacity:.7,zIndex:2}}/>}
               {/* Checklist view: rendered view with clickable checkboxes + strikethrough */}
               {checklistView&&(()=>{const content=textRef.current||"";const lines=content.split("\n");const sty=ts(page.type);
+                const addClItem=()=>{if(!clNewItem.trim())return;const newContent=content+(content&&!content.endsWith("\n")?"\n":"")+"[ ] "+clNewItem.trim();textRef.current=newContent;const el=textareaRef.current;if(el)el.value=newContent;saveText();setClNewItem("");setCbTick(t=>t+1);};
+                const deleteClLine=(li)=>{const newLines=[...lines];newLines.splice(li,1);const nv=newLines.join("\n");textRef.current=nv;const el=textareaRef.current;if(el)el.value=nv;saveText();setCbTick(t=>t+1);};
                 return(<div style={{...sty,minHeight:800,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
                   {lines.map((line,li)=>{
                     const isChecked=line.startsWith("[x] ");const isUnchecked=line.startsWith("[ ] ");
                     if(isChecked||isUnchecked){const txt=line.slice(4);
-                      return(<div key={li} style={{display:"flex",alignItems:"center",minHeight:sty.lineHeight,cursor:"pointer"}} onClick={()=>toggleInlineCheckbox(li)}>
-                        <span style={{width:22,flexShrink:0,textAlign:"center",fontSize:16,color:isChecked?"#43e97b":"rgba(102,126,234,.5)"}}>{isChecked?"☑":"☐"}</span>
-                        <span style={{color:isChecked?"rgba(232,224,240,.3)":"#e8e0f0",textDecoration:isChecked?"line-through":"none"}}>{txt||" "}</span>
+                      return(<div key={li+"-"+cbTick} style={{display:"flex",alignItems:"center",minHeight:sty.lineHeight,gap:4}}>
+                        <span onClick={()=>toggleInlineCheckbox(li)} style={{width:22,flexShrink:0,textAlign:"center",fontSize:16,color:isChecked?"#43e97b":"rgba(102,126,234,.5)",cursor:"pointer"}}>{isChecked?"☑":"☐"}</span>
+                        <span style={{flex:1,color:isChecked?"rgba(232,224,240,.3)":"#e8e0f0",textDecoration:isChecked?"line-through":"none"}}>{txt||" "}</span>
+                        <button onClick={()=>deleteClLine(li)} style={{background:"none",border:"none",color:"rgba(245,87,108,.35)",fontSize:14,cursor:"pointer",padding:"2px 4px",flexShrink:0}}>×</button>
                       </div>);}
                     return <div key={li} style={{minHeight:sty.lineHeight}}>{line||"\u00A0"}</div>;
                   })}
+                  {/* Add new checkbox item */}
+                  <div style={{display:"flex",gap:6,marginTop:8,alignItems:"center"}}>
+                    <span style={{width:22,flexShrink:0,textAlign:"center",fontSize:16,color:"rgba(102,126,234,.3)"}}>☐</span>
+                    <input value={clNewItem} onChange={e=>setClNewItem(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addClItem();}}}
+                      placeholder="Add item..." style={{flex:1,padding:"6px 10px",borderRadius:8,border:"1px solid rgba(102,126,234,.15)",background:"rgba(102,126,234,.04)",color:"#e8e0f0",fontSize:14,outline:"none",fontFamily:"'Nunito',sans-serif"}}/>
+                    <button onClick={addClItem} style={{padding:"4px 12px",borderRadius:8,background:"rgba(102,126,234,.12)",border:"1px solid rgba(102,126,234,.25)",color:"#a8b4f0",fontSize:14,fontWeight:700,cursor:"pointer"}}>+</button>
+                  </div>
                 </div>);
               })()}
               {/* Normal textarea (hidden when checklist view is active) */}
@@ -11153,6 +11163,7 @@ function SpiritAnimals(){
   const _realStreak=appState?.auraStreak||0;const streak=devStreak!==null?devStreak:_realStreak;const days=appState?.startDate?getDaysBetween(appState.startDate,getToday())+1:0;
   const allDoneToday=appState?getAllDone(appState):false;const nextLv=LEVEL_REQUIREMENTS.find(l=>l.level===level.level+1);
   const hp=appState?getHP(appState):100;const canEditHabits=true;
+  const animalData=appState?getAnimalData(appState):{color:"#8b5cf6",accent:"#a78bfa"};
   const hinted=getHintedEffects(customHabitName);
   // Filter out suggestions that have already been added as habits
   const usedHabitNames=new Set([...PRESET_HABITS.map(h=>h.name),...customHabits.map(h=>h.name),...(appState?.allHabits||[]).filter(h=>h.id?.startsWith("custom_")).map(h=>h.name),...previousGoals.map(h=>h.name)]);
@@ -11597,78 +11608,93 @@ function SpiritAnimals(){
       
 
       {/* Header */}
-      <div style={{padding:"10px 20px 0",textAlign:"center"}}>
-        <div style={{fontSize:16,fontWeight:900,background:"linear-gradient(135deg,#f093fb,#f5576c,#feca57)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1}}>{appState?.buddyName||"Zobuddy"}</div>
-        <div onClick={()=>{clearTimeout(devTimer.t);setDevTaps(p=>{const n=p+1;if(n>=5){setDevStreak(prev=>prev!==null?null:0);return 0;}devTimer.t=setTimeout(()=>setDevTaps(0),1500);return n;});}} style={{fontSize:13,opacity:.25,marginTop:1,cursor:"default"}}>Day {days} • Lv.{level.level} {level.name}</div>
-        {devStreak!==null&&<div style={{margin:"4px auto",maxWidth:220}}>
-          <div style={{fontSize:11,opacity:.4,textAlign:"center",marginBottom:2}}>🔧 Dev: Streak preview ({devStreak}d)</div>
-          <input type="range" min="0" max="35" value={devStreak} onChange={e=>setDevStreak(Number(e.target.value))} style={{width:"100%",height:4,appearance:"auto",opacity:.6}}/>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:10,opacity:.3}}><span>0</span><span>3</span><span>7</span><span>14</span><span>21</span><span>30+</span></div>
-        </div>}
-      </div>
+      <div style={{padding:"8px 16px 0"}}>
+        {/* ── Buddy Card (styled like stats card) ── */}
+        <div style={{borderRadius:16,padding:2,background:`linear-gradient(135deg,${animalData.color},${animalData.accent},#feca57,${animalData.color})`,backgroundSize:"300% 300%",animation:"holoShift 4s ease infinite",boxShadow:streak>=30?"0 0 30px rgba(103,232,249,.6)":streak>=21?"0 0 25px rgba(251,191,36,.5)":streak>=14?"0 0 20px rgba(192,132,252,.4)":streak>=7?"0 0 15px rgba(96,165,250,.3)":"0 8px 32px rgba(0,0,0,.5)"}}>
+          <div style={{borderRadius:14,background:"linear-gradient(160deg,#0d0d2b 0%,#1a1040 30%,#0f1a3a 60%,#0d0d2b 100%)",padding:"12px 14px",position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",inset:0,borderRadius:14,background:"linear-gradient(105deg,transparent 30%,rgba(255,255,255,.03) 45%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.03) 55%,transparent 70%)",backgroundSize:"200% 200%",animation:"holoShimmer 3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
+            <div style={{position:"relative",zIndex:2}}>
+              {/* Name + Level row */}
+              <div onClick={()=>{clearTimeout(devTimer.t);setDevTaps(p=>{const n=p+1;if(n>=5){setDevStreak(prev=>prev!==null?null:0);return 0;}devTimer.t=setTimeout(()=>setDevTaps(0),1500);return n;});}} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",cursor:"default"}}>
+                <div style={{fontSize:16,fontWeight:900,background:"linear-gradient(135deg,#f093fb,#f5576c,#feca57)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1.2}}>{appState?.buddyName||"Zobuddy"}</div>
+                <div style={{fontSize:12,opacity:.35}}>Day {days} • Lv.{level.level} {level.name}</div>
+              </div>
+              {devStreak!==null&&<div style={{margin:"4px auto",maxWidth:220}}>
+                <div style={{fontSize:11,opacity:.4,textAlign:"center",marginBottom:2}}>🔧 Dev: Streak preview ({devStreak}d)</div>
+                <input type="range" min="0" max="35" value={devStreak} onChange={e=>setDevStreak(Number(e.target.value))} style={{width:"100%",height:4,appearance:"auto",opacity:.6}}/>
+              </div>}
 
-      <div style={{display:"flex",justifyContent:"center",gap:16,padding:"6px 20px 4px"}}>
-        <div style={{textAlign:"center"}}><div style={{fontSize:15,fontWeight:900}}>⚡{duelStats.power}</div><div style={{fontSize:11,opacity:.35}}>POWER{duelStats.tokens>0?` • 🎟️${duelStats.tokens}`:""}</div></div>
-        {duelCode&&<div style={{textAlign:"center"}}><div style={{fontSize:16,fontWeight:900,color:"#feca57",letterSpacing:2,fontFamily:"monospace"}}>{duelCode}</div><div style={{fontSize:11,opacity:.35}}>CODE</div></div>}
-        <div style={{textAlign:"center"}}><div style={{fontSize:15,fontWeight:900,color:streak>=3?"#feca57":"#555"}}>{streak>=3?"✨":""}{streak}d</div><div style={{fontSize:11,opacity:.35}}>STREAK</div></div>
-        <div style={{textAlign:"center"}}><div style={{fontSize:15,fontWeight:900}}>{doneToday.length}/{totalHabits}</div><div style={{fontSize:11,opacity:.35}}>TODAY</div></div>
-      </div>
+              {/* Buddy display */}
+              <div style={{margin:"8px -4px 6px",borderRadius:12,background:`linear-gradient(180deg,${animalData.color}12 0%,${animalData.accent}08 50%,transparent 100%)`,border:`1px solid ${animalData.accent}18`,padding:"4px 0",display:"flex",alignItems:"center",justifyContent:"center",minHeight:140}}>
+                <div style={{position:"relative"}}>
+                  {allDoneToday&&<div style={{textAlign:"center",position:"absolute",top:-2,left:"50%",transform:"translateX(-50%)",zIndex:3}}><span style={{fontSize:12,color:"#feca57"}}>✅ All done!</span></div>}
+                  {negCount>0&&!allDoneToday&&<div style={{textAlign:"center",position:"absolute",top:-2,left:"50%",transform:"translateX(-50%)",zIndex:3,whiteSpace:"nowrap"}}><span style={{fontSize:11,color:"#f5576c",opacity:.7}}>⚠️ {negCount} effect{negCount>1?"s":""} active</span></div>}
+                  <BuddyDisplay animal={appState?.animal} state={{...(appState||{}),_roaming:isRoaming&&!fullBack,auraStreak:streak}} size={130}/>
+                </div>
+              </div>
 
-      <div style={{padding:"0 20px 4px"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
-          <span style={{fontSize:13,fontWeight:800,opacity:.4}}>{mood} HP</span>
-          <span style={{fontSize:14,fontWeight:900,color:hp>=80?"#43e97b":hp>=50?"#feca57":"#f5576c"}}>{hp}%</span>
+              {/* HP bar */}
+              <div style={{marginBottom:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
+                  <span style={{fontWeight:800,opacity:.4}}>{mood} HP</span>
+                  <span style={{fontWeight:800,color:hp>=80?"#43e97b":hp>=50?"#feca57":"#f5576c"}}>{hp}%</span>
+                </div>
+                <HealthBar percent={hp} small/>
+              </div>
+
+              {/* Stats grid */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:4,marginBottom:6}}>
+                {[{l:"POWER",v:duelStats.power,c:"#feca57"},{l:"STREAK",v:`${streak}d`,c:streak>=3?"#f5576c":"#555"},{l:"TODAY",v:`${doneToday.length}/${totalHabits}`,c:"#60a5fa"},{l:"CODE",v:duelCode||"—",c:"#feca57",mono:true}].map(s=>(
+                  <div key={s.l} style={{background:"rgba(255,255,255,.04)",borderRadius:8,padding:"5px 2px",textAlign:"center",border:"1px solid rgba(255,255,255,.06)"}}>
+                    <div style={{fontSize:s.mono?11:14,fontWeight:900,color:s.c,fontFamily:s.mono?"monospace":"inherit",letterSpacing:s.mono?1:0}}>{s.v}</div>
+                    <div style={{fontSize:9,fontWeight:700,opacity:.3,letterSpacing:1,marginTop:1}}>{s.l}</div>
+                  </div>))}
+              </div>
+
+              {/* Level progress */}
+              {nextLv&&<div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:11,opacity:.3,marginBottom:2}}><span>Next: {nextLv.name}</span><span>{streak}/{nextLv.auraDays}d</span></div>
+                <div style={{height:3,borderRadius:2,background:"rgba(255,255,255,.05)",overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg,#667eea,#f093fb)",width:`${Math.min(100,(streak/nextLv.auraDays)*100)}%`,transition:"width .5s"}}/></div>
+              </div>}
+            </div>
+          </div>
         </div>
-        <HealthBar percent={hp}/>
-      </div>
-
-      {/* Spacing warning — above buddy */}
-
-      {/* Buddy area */}
-      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",position:"relative",minHeight:0,padding:"0 16px 8px"}}>
-        <div style={{position:"relative",width:"100%",maxWidth:280}}>
-          {allDoneToday&&<div style={{textAlign:"center",marginBottom:2}}><span style={{fontSize:14,color:"#feca57"}}>✅ All done!</span></div>}
-          {negCount>0&&!allDoneToday&&<div style={{textAlign:"center",fontSize:13,color:"#f5576c",opacity:.6,marginBottom:2}}>⚠️ {negCount} effect{negCount>1?"s":""} active</div>}
-          <BuddyDisplay animal={appState?.animal} state={{...(appState||{}),_roaming:isRoaming&&!fullBack,auraStreak:streak}} size={160}/>
-        </div>
-        {nextLv&&<div style={{width:"100%",maxWidth:260,marginTop:4}}>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:13,opacity:.4,marginBottom:2}}><span>Next: {nextLv.name}</span><span>{streak}/{nextLv.auraDays}d</span></div>
-          <div style={{height:3,borderRadius:2,background:"rgba(255,255,255,.05)",overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg,#667eea,#f093fb)",width:`${Math.min(100,(streak/nextLv.auraDays)*100)}%`,transition:"width .5s"}}/></div>
-        </div>}
       </div>
 
       {/* Goals */}
-      <div style={{padding:"6px 20px 0"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-          <span style={{fontSize:14,fontWeight:700,opacity:.35}}>GOALS</span>
-          {canEditHabits?<button onClick={()=>openEditGoals()} style={{background:"rgba(102,126,234,.12)",border:"1px solid rgba(102,126,234,.25)",borderRadius:6,padding:"2px 8px",fontSize:13,color:"#a8b4f0",cursor:"pointer",fontWeight:700,display:"flex",alignItems:"center",gap:3}}>✏️ Edit</button>
-          :<span style={{fontSize:13,opacity:.25}}>🔒 Locked until tomorrow</span>}
+      <div style={{padding:"8px 16px 0"}}>
+        <div style={{background:"rgba(255,255,255,.03)",borderRadius:12,border:"1px solid rgba(255,255,255,.06)",padding:"8px 10px"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{fontSize:12,fontWeight:700,opacity:.3,letterSpacing:1}}>GOALS</span>
+            {canEditHabits?<button onClick={()=>openEditGoals()} style={{background:"rgba(102,126,234,.12)",border:"1px solid rgba(102,126,234,.25)",borderRadius:6,padding:"2px 8px",fontSize:12,color:"#a8b4f0",cursor:"pointer",fontWeight:700}}>✏️ Edit</button>
+            :<span style={{fontSize:11,opacity:.2}}>🔒 Locked</span>}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>{visibleHabits.map(hId=><HabitChip key={hId} hId={hId}/>)}</div>
+          {overflowHabits.length>0&&<>
+            <button onClick={()=>setShowMore(!showMore)} style={{...S.btnS,width:"100%",marginTop:4,textAlign:"center",fontSize:13,padding:"5px 0"}}>
+              {showMore?"▲ Hide":`▼ +${overflowHabits.length} more (${overflowHabits.filter(h=>doneToday.includes(h)).length}/${overflowHabits.length} done)`}
+            </button>
+            {showMore&&<div style={{maxHeight:120,overflowY:"auto",display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,marginTop:4,padding:2}}>{overflowHabits.map(hId=><HabitChip key={hId} hId={hId}/>)}</div>}
+          </>}
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>{visibleHabits.map(hId=><HabitChip key={hId} hId={hId}/>)}</div>
-        {overflowHabits.length>0&&<>
-          <button onClick={()=>setShowMore(!showMore)} style={{...S.btnS,width:"100%",marginTop:4,textAlign:"center",fontSize:14,padding:"6px 0"}}>
-            {showMore?"▲ Hide":`▼ +${overflowHabits.length} more (${overflowHabits.filter(h=>doneToday.includes(h)).length}/${overflowHabits.length} done)`}
-          </button>
-          {showMore&&<div style={{maxHeight:120,overflowY:"auto",display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,marginTop:4,padding:2}}>{overflowHabits.map(hId=><HabitChip key={hId} hId={hId}/>)}</div>}
-        </>}
       </div>
 
-      {/* Daily Quest — placed below goals for clear separation */}
-      {dailyQuestInfo&&<div style={{margin:"8px 20px 0",padding:"10px 14px",borderRadius:12,background:"linear-gradient(135deg,rgba(254,202,87,.08),rgba(255,165,0,.04))",border:"1px solid rgba(254,202,87,.15)"}}>
+      {/* Daily Quest */}
+      {dailyQuestInfo&&<div style={{margin:"6px 16px 0",padding:"8px 12px",borderRadius:10,background:"linear-gradient(135deg,rgba(254,202,87,.06),rgba(255,165,0,.03))",border:"1px solid rgba(254,202,87,.12)"}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:16}}>{dailyQuestInfo.icon}</span>
+          <span style={{fontSize:15}}>{dailyQuestInfo.icon}</span>
           <div style={{flex:1}}>
-            <div style={{fontSize:14,fontWeight:800,color:"#feca57"}}>⭐ Daily Quest</div>
-            <div style={{fontSize:13,opacity:.6}}>{dailyQuestInfo.name}</div>
-            {dailyQuestId&&<div style={{fontSize:13,color:"#43e97b",marginTop:2}}>✅ In your goals — complete for 3x HP!</div>}
+            <div style={{fontSize:13,fontWeight:800,color:"#feca57"}}>⭐ Daily Quest</div>
+            <div style={{fontSize:12,opacity:.5}}>{dailyQuestInfo.name}</div>
+            {dailyQuestId&&<div style={{fontSize:12,color:"#43e97b",marginTop:1}}>✅ In your goals — 3x HP!</div>}
           </div>
-          {dailyQuestDone&&<span style={{fontSize:15,color:"#43e97b",fontWeight:800}}>✅</span>}
-          {questNotInGoals&&canEditHabits&&<button onClick={addDailyQuest} style={{background:"linear-gradient(135deg,#43e97b,#38f9d7)",color:"#1a1a2e",border:"none",borderRadius:10,padding:"8px 14px",fontSize:15,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",minHeight:36}}>+ Add</button>}
+          {dailyQuestDone&&<span style={{fontSize:14,color:"#43e97b",fontWeight:800}}>✅</span>}
+          {questNotInGoals&&canEditHabits&&<button onClick={addDailyQuest} style={{background:"linear-gradient(135deg,#43e97b,#38f9d7)",color:"#1a1a2e",border:"none",borderRadius:8,padding:"6px 12px",fontSize:13,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>+ Add</button>}
         </div>
       </div>}
 
       {/* Action buttons */}
-      <div style={{display:"flex",gap:8,padding:"10px 20px 16px"}}>
+      <div style={{display:"flex",gap:6,padding:"10px 16px 14px"}}>
         <button onClick={()=>setShowShare(true)} style={{...S.btn,flex:1,fontSize:16,padding:"11px 0",background:"linear-gradient(135deg,#43e97b,#38f9d7)",color:"#1a1a2e"}}>📊 Stats</button>
         <button onClick={()=>setShowDuel(true)} style={{...S.btn,flex:1,fontSize:16,padding:"11px 0",background:"linear-gradient(135deg,#f093fb,#f5576c)"}}>⚔️ Battle</button>
         <button onClick={()=>setShowMiniGames(true)} style={{...S.btn,flex:1,fontSize:16,padding:"11px 0",background:"linear-gradient(135deg,#feca57,#fb923c)",color:"#1a1a2e"}}>🎮 Games</button>
