@@ -6072,101 +6072,89 @@ const NotebookPanel=()=>{
 
   // ─── PIXEL ART ──────────────────────────────────────────────────
   const pixCanvasRef=React.useRef(null);const pixIsPainting=React.useRef(false);const pixelUndoRef=React.useRef([]);const pixelRedoRef=React.useRef([]);
-  const PIXEL_COLORS=["#f5576c","#feca57","#43e97b","#60a5fa","#f093fb","#fb923c","#22d3ee","#fff","#888","#333"];
+  // 36-color cross-stitch palette based on standard thread chart
+  const PIXEL_PALETTE=[
+    {n:1,c:"#000000",nm:"Black"},{n:2,c:"#444444",nm:"Charcoal"},{n:3,c:"#666666",nm:"Dark Gray"},{n:4,c:"#999999",nm:"Gray"},
+    {n:5,c:"#bbbbbb",nm:"Light Gray"},{n:6,c:"#778899",nm:"Blue Gray"},{n:7,c:"#ffffff",nm:"White"},{n:8,c:"#f5f5dc",nm:"Off White"},
+    {n:9,c:"#e03030",nm:"Red"},{n:10,c:"#ff6600",nm:"Orange"},{n:11,c:"#cc6600",nm:"Burnt Orange"},{n:12,c:"#ffee44",nm:"Yellow"},
+    {n:13,c:"#ccaa00",nm:"Yellow Gold"},{n:14,c:"#bb8800",nm:"Athletic Gold"},{n:15,c:"#aa7700",nm:"Gold"},
+    {n:16,c:"#003388",nm:"Navy Blue"},{n:17,c:"#2255cc",nm:"Royal Blue"},{n:18,c:"#3388ff",nm:"Blue"},
+    {n:19,c:"#66bbff",nm:"Sky Blue"},{n:20,c:"#884400",nm:"Brown"},{n:21,c:"#663300",nm:"Chocolate"},
+    {n:22,c:"#442200",nm:"Dark Brown"},{n:23,c:"#c8a070",nm:"Tan"},{n:24,c:"#ddccaa",nm:"Flesh"},
+    {n:25,c:"#009966",nm:"Teal"},{n:26,c:"#228833",nm:"Green"},{n:27,c:"#44cc55",nm:"Spring Green"},
+    {n:28,c:"#115522",nm:"Forest Green"},{n:29,c:"#cc88ff",nm:"Lavender"},{n:30,c:"#7733bb",nm:"Purple"},
+    {n:31,c:"#ff6699",nm:"Pink"},{n:32,c:"#dd2277",nm:"Magenta"},{n:33,c:"#881133",nm:"Maroon"},
+    {n:34,c:"#667733",nm:"Olive Green"},{n:35,c:"#556622",nm:"Olive Drab"},{n:36,c:"#999966",nm:"Khaki"}
+  ];
+  const PIXEL_COLORS=PIXEL_PALETTE.map(p=>p.c);
   const PIXEL_SIZES=[{id:"16x16",label:"16×16",desc:"Icon",c:16,r:16},{id:"32x32",label:"32×32",desc:"Sprite",c:32,r:32},{id:"48x48",label:"48×48",desc:"Detailed",c:48,r:48},{id:"64x64",label:"64×64",desc:"Large",c:64,r:64},{id:"128x128",label:"128×128",desc:"HD",c:128,r:128},{id:"256x256",label:"256×256",desc:"Full",c:256,r:256},{id:"512x512",label:"512×512",desc:"Max",c:512,r:512}];
   const[pixelGridLines,setPixelGridLines]=useState(0);
   const[customPixelW,setCustomPixelW]=useState("100");
   const[customPixelH,setCustomPixelH]=useState("100");
+  const[showPixNumbers,setShowPixNumbers]=useState(false);
+  const[showPixPicker,setShowPixPicker]=useState(false);
+  const[pixCustomLabels,setPixCustomLabels]=useState(()=>{try{return JSON.parse(localStorage.getItem("zobuddy_pix_labels"))||{};}catch{return{};}});
+  const savePixLabels=(l)=>{setPixCustomLabels(l);try{localStorage.setItem("zobuddy_pix_labels",JSON.stringify(l));}catch{}};
   const getPixels=()=>{const d=readNb();return d.pages?.[nbPageIdx]?.pixels||{};};
   const getPixelDims=()=>{const d=readNb();const page=d.pages?.[nbPageIdx];const ps=page?.pixelSize||"32x32";
     const preset=PIXEL_SIZES.find(s=>s.id===ps);if(preset)return preset;
-    // Custom size: parse "CxR" format
     const m=ps.match(/^(\d+)x(\d+)$/);if(m)return{id:ps,label:`${m[1]}×${m[2]}`,desc:"Custom",c:Number(m[1]),r:Number(m[2])};
     return PIXEL_SIZES[1];};
   const getPixelCellSize=()=>{const dims=getPixelDims();return Math.max(2,Math.min(20,Math.floor(400/Math.max(dims.c,dims.r))));};
+  const getColorNum=(hex)=>{if(!hex)return"";const h=hex.toLowerCase();const p=PIXEL_PALETTE.find(p=>p.c===h);return p?String(p.n):(pixCustomLabels[h]||"");};
   const drawPixelGrid=()=>{const c=pixCanvasRef.current;if(!c)return;const ctx=c.getContext("2d");
     const dims=getPixelDims();const cs=getPixelCellSize();const pixels=getPixels();
     ctx.fillStyle="#111";ctx.fillRect(0,0,c.width,c.height);
-    // Draw pixels first
-    Object.entries(pixels).forEach(([key,color])=>{const[r,cl]=key.split("-").map(Number);if(r<dims.r&&cl<dims.c){ctx.fillStyle=color;ctx.fillRect(cl*cs,r*cs,cs,cs);}});
-    // Fine grid lines on top — subtle, 1px
-    ctx.globalAlpha=0.12;ctx.fillStyle="#fff";
-    for(let x=1;x<dims.c;x++)ctx.fillRect(x*cs,0,1,dims.r*cs);
-    for(let y=1;y<dims.r;y++)ctx.fillRect(0,y*cs,dims.c*cs,1);
-    ctx.globalAlpha=1;
+    // Draw pixels inset so grid lines show cleanly between them
+    const inset=cs>=6?1:0;
+    Object.entries(pixels).forEach(([key,color])=>{const[r,cl]=key.split("-").map(Number);if(r<dims.r&&cl<dims.c){ctx.fillStyle=color;ctx.fillRect(cl*cs+inset,r*cs+inset,cs-inset*2,cs-inset*2);}});
+    // Grid lines in the gaps
+    if(cs>=4){ctx.fillStyle="rgba(255,255,255,.15)";
+      for(let x=0;x<=dims.c;x++)ctx.fillRect(x*cs,0,1,dims.r*cs);
+      for(let y=0;y<=dims.r;y++)ctx.fillRect(0,y*cs,dims.c*cs,1);}
     // Section borders
-    if(pixelGridLines>0){
-      ctx.globalAlpha=0.35;ctx.fillStyle="#fff";
+    if(pixelGridLines>0){ctx.fillStyle="rgba(255,255,255,.45)";
       for(let x=0;x<=dims.c;x+=pixelGridLines)ctx.fillRect(x*cs,0,1,dims.r*cs);
-      for(let y=0;y<=dims.r;y+=pixelGridLines)ctx.fillRect(0,y*cs,dims.c*cs,1);
-      ctx.globalAlpha=1;
-    }
+      for(let y=0;y<=dims.r;y+=pixelGridLines)ctx.fillRect(0,y*cs,dims.c*cs,1);}
+    // Number overlay
+    if(showPixNumbers&&cs>=8){ctx.textAlign="center";ctx.textBaseline="middle";
+      const fs=Math.max(5,Math.min(cs-3,11));ctx.font=`bold ${fs}px sans-serif`;
+      Object.entries(pixels).forEach(([key,color])=>{const[r,cl]=key.split("-").map(Number);
+        if(r<dims.r&&cl<dims.c){const num=getColorNum(color);if(num){
+          const hr=parseInt(color.slice(1,3),16)||0,hg=parseInt(color.slice(3,5),16)||0,hb=parseInt(color.slice(5,7),16)||0;
+          ctx.fillStyle=(hr*.299+hg*.587+hb*.114)>128?"rgba(0,0,0,.85)":"rgba(255,255,255,.85)";
+          ctx.fillText(num,cl*cs+cs/2,r*cs+cs/2);}}});}
   };
   // ─── IMAGE TO PIXEL ART ────────────────────────────────────────
   const[pixImporting,setPixImporting]=useState(false);
-  const _pixImgHelper=(file,useFullColor)=>{
-    setPixImporting(true);
-    const reader=new FileReader();
-    reader.onload=(ev)=>{
-      const img=new Image();
-      img.onload=()=>{
-        const dims=getPixelDims();
-        const tc=document.createElement("canvas");tc.width=dims.c;tc.height=dims.r;
-        const tctx=tc.getContext("2d");
-        tctx.imageSmoothingEnabled=true;tctx.imageSmoothingQuality="medium";
-        // Fit image covering the grid (crop to fill)
-        const imgRatio=img.width/img.height;const gridRatio=dims.c/dims.r;
-        let sx=0,sy=0,sw=img.width,sh=img.height;
-        if(imgRatio>gridRatio){const nw=img.height*gridRatio;sx=(img.width-nw)/2;sw=nw;}
-        else{const nh=img.width/gridRatio;sy=(img.height-nh)/2;sh=nh;}
-        tctx.drawImage(img,sx,sy,sw,sh,0,0,dims.c,dims.r);
-        const data=tctx.getImageData(0,0,dims.c,dims.r).data;
-        const rgbToHex=(r,g,b)=>"#"+[r,g,b].map(v=>v.toString(16).padStart(2,"0")).join("");
-        const newPixels={};
-        if(useFullColor){
-          // Full color mode — use actual pixel colors
-          for(let row=0;row<dims.r;row++){for(let col=0;col<dims.c;col++){
-            const idx=(row*dims.c+col)*4;
-            const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];
-            if(a<30)continue;
-            newPixels[`${row}-${col}`]=rgbToHex(r,g,b);
-          }}
-        }else{
-          // Palette mode — comprehensive 32-color cross-stitch palette
-          const palette=["#000000","#1a1a2e","#2d2d44","#555555","#888888","#bbbbbb","#ffffff",
-            "#f5576c","#cc3344","#881122","#fb923c","#cc7722","#884400",
-            "#feca57","#ccaa33","#887700","#43e97b","#22aa55","#116633",
-            "#60a5fa","#3366cc","#223388","#f093fb","#aa55cc","#663388",
-            "#22d3ee","#1199aa","#006666","#deb887","#a0724a","#6b4423","#f5deb3","#e8c9a0"];
-          const hexToRgb=(h)=>{const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);return[r,g,b];};
-          const paletteRgb=palette.map(hexToRgb);
-          const nearest=(r,g,b)=>{let best=0,bestD=Infinity;paletteRgb.forEach(([pr,pg,pb],i)=>{const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bestD){bestD=d;best=i;}});return palette[best];};
-          for(let row=0;row<dims.r;row++){for(let col=0;col<dims.c;col++){
-            const idx=(row*dims.c+col)*4;
-            const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];
-            if(a<30)continue;
-            newPixels[`${row}-${col}`]=nearest(r,g,b);
-          }}
-        }
-        const d=readNb();if(d.pages?.[pageIdxRef.current]){
-          d.pages[pageIdxRef.current].pixels=newPixels;writeNb(d);setNbData(d);
-        }
-        drawPixelGrid();setPixImporting(false);
-      };
-      img.src=ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-  const importImageToPixels=()=>{
-    const input=document.createElement("input");input.type="file";input.accept="image/*";
-    input.onchange=(e)=>{const file=e.target.files[0];if(file)_pixImgHelper(file,false);};
-    input.click();
-  };
-  const importImageFullColor=()=>{
-    const input=document.createElement("input");input.type="file";input.accept="image/*";
-    input.onchange=(e)=>{const file=e.target.files[0];if(file)_pixImgHelper(file,true);};
-    input.click();
-  };
+  const[pixImgCrop,setPixImgCrop]=useState(null);
+  const[pixCropBox,setPixCropBox]=useState({x:0,y:0,w:100,h:100});
+  const pixImgFileRef=React.useRef(null);const pixImgModeRef=React.useRef(false);
+  const _pixImgHelper=(file,useFullColor,crop)=>{
+    setPixImporting(true);const reader=new FileReader();
+    reader.onload=(ev)=>{const img=new Image();img.onload=()=>{
+      const dims=getPixelDims();const tc=document.createElement("canvas");tc.width=dims.c;tc.height=dims.r;
+      const tctx=tc.getContext("2d");tctx.imageSmoothingEnabled=true;tctx.imageSmoothingQuality="medium";
+      let sx,sy,sw,sh;
+      if(crop){sx=Math.round(img.width*crop.x/100);sy=Math.round(img.height*crop.y/100);sw=Math.max(1,Math.round(img.width*crop.w/100));sh=Math.max(1,Math.round(img.height*crop.h/100));}
+      else{const ir=img.width/img.height,gr=dims.c/dims.r;sx=0;sy=0;sw=img.width;sh=img.height;
+        if(ir>gr){const nw=img.height*gr;sx=(img.width-nw)/2;sw=nw;}else{const nh=img.width/gr;sy=(img.height-nh)/2;sh=nh;}}
+      tctx.drawImage(img,sx,sy,sw,sh,0,0,dims.c,dims.r);
+      const data=tctx.getImageData(0,0,dims.c,dims.r).data;
+      const rgbToHex=(r,g,b)=>"#"+[r,g,b].map(v=>v.toString(16).padStart(2,"0")).join("");
+      const newPixels={};
+      if(useFullColor){for(let row=0;row<dims.r;row++)for(let col=0;col<dims.c;col++){const idx=(row*dims.c+col)*4;const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];if(a<30)continue;newPixels[`${row}-${col}`]=rgbToHex(r,g,b);}
+      }else{const pal=PIXEL_PALETTE.map(p=>p.c);const htr=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];const palRgb=pal.map(htr);
+        const near=(r,g,b)=>{let bi=0,bd=Infinity;palRgb.forEach(([pr,pg,pb],i)=>{const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bd){bd=d;bi=i;}});return pal[bi];};
+        for(let row=0;row<dims.r;row++)for(let col=0;col<dims.c;col++){const idx=(row*dims.c+col)*4;const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];if(a<30)continue;newPixels[`${row}-${col}`]=near(r,g,b);}}
+      const d=readNb();if(d.pages?.[pageIdxRef.current]){d.pages[pageIdxRef.current].pixels=newPixels;writeNb(d);setNbData(d);}
+      drawPixelGrid();setPixImporting(false);setPixImgCrop(null);
+    };img.src=ev.target.result;};reader.readAsDataURL(file);};
+  const startImageImport=(fullColor)=>{const input=document.createElement("input");input.type="file";input.accept="image/*";
+    input.onchange=(e)=>{const file=e.target.files[0];if(!file)return;pixImgFileRef.current=file;pixImgModeRef.current=fullColor;
+      const reader=new FileReader();reader.onload=(ev)=>{const img=new Image();img.onload=()=>{setPixImgCrop({src:ev.target.result,imgW:img.width,imgH:img.height});setPixCropBox({x:0,y:0,w:100,h:100});};img.src=ev.target.result;};reader.readAsDataURL(file);};input.click();};
+  const confirmCrop=()=>{if(pixImgFileRef.current)_pixImgHelper(pixImgFileRef.current,pixImgModeRef.current,pixCropBox);};
+
   const setPixel=(row,col,color,erase)=>{const dims=getPixelDims();if(row<0||row>=dims.r||col<0||col>=dims.c)return;
     const key=`${row}-${col}`;const d=readNb();if(!d.pages?.[nbPageIdx])return;
     const pixels=d.pages[nbPageIdx].pixels||{};const old=pixels[key]||null;
@@ -6351,19 +6339,50 @@ const NotebookPanel=()=>{
         <span style={{fontSize:11,opacity:.4,minWidth:32,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
         <button onClick={()=>setPageZoom(z=>Math.min(6,z+0.2))} style={btn({padding:"4px 8px"})}>+</button>
         <div style={{width:1,height:20,background:"rgba(255,255,255,.1)",margin:"0 2px"}}/>
-        {PIXEL_COLORS.map(c=>(<div key={c} onClick={()=>{setPixelColor(c);setPixelEraser(false);}} style={{width:24,height:24,borderRadius:5,background:c,border:pixelColor===c&&!pixelEraser?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer",opacity:pixelEraser?.4:1,transition:"opacity .15s"}}/>))}
-        <button onClick={()=>{if(!confirm("Clear all?"))return;const d=readNb();if(d.pages?.[nbPageIdx]){d.pages[nbPageIdx].pixels={};writeNb(d);drawPixelGrid();}}}
-          style={btn({background:"rgba(245,87,108,.1)",border:"1px solid rgba(245,87,108,.2)",color:"#f5576c",fontSize:11,padding:"4px 10px"})}>Clear</button>
-        <button onClick={importImageToPixels} disabled={pixImporting}
-          style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:11,padding:"4px 8px"})}>{pixImporting?"...":"📷 Palette"}</button>
-        <button onClick={importImageFullColor} disabled={pixImporting}
-          style={btn({background:"rgba(240,147,251,.1)",border:"1px solid rgba(240,147,251,.2)",color:"#f093fb",fontSize:11,padding:"4px 8px"})}>{pixImporting?"...":"📷 Full"}</button>
+        {/* Color swatches — show first 12, tap picker for all 36 */}
+        {PIXEL_COLORS.slice(0,12).map(c=>(<div key={c} onClick={()=>{setPixelColor(c);setPixelEraser(false);}} style={{width:20,height:20,borderRadius:4,background:c,border:pixelColor===c&&!pixelEraser?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer",opacity:pixelEraser?.4:1}}/>))}
+        <button onClick={()=>setShowPixPicker(v=>!v)} style={btn({padding:"4px 6px",fontSize:11,color:showPixPicker?"#feca57":"#888"})}>🎨</button>
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:3,padding:"0 10px 4px",flexShrink:0}}>
+      {/* Full 36-color picker */}
+      {showPixPicker&&<div style={{padding:"4px 10px 6px",flexShrink:0}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(9,1fr)",gap:2}}>
+          {PIXEL_PALETTE.map(p=>(<div key={p.n} onClick={()=>{setPixelColor(p.c);setPixelEraser(false);}} style={{position:"relative",aspectRatio:"1",borderRadius:4,background:p.c,border:pixelColor===p.c&&!pixelEraser?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <span style={{fontSize:8,fontWeight:700,color:(parseInt(p.c.slice(1,3),16)*.299+parseInt(p.c.slice(3,5),16)*.587+parseInt(p.c.slice(5,7),16)*.114)>128?"#000":"#fff",opacity:.7}}>{p.n}</span>
+          </div>))}
+        </div>
+        <div style={{fontSize:10,opacity:.3,marginTop:4,textAlign:"center"}}>{PIXEL_PALETTE.find(p=>p.c===pixelColor)?.nm||"Custom"} ({PIXEL_PALETTE.find(p=>p.c===pixelColor)?.n||"—"})</div>
+      </div>}
+      <div style={{display:"flex",alignItems:"center",gap:3,padding:"0 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
+        <button onClick={()=>{if(!confirm("Clear all?"))return;const d=readNb();if(d.pages?.[nbPageIdx]){d.pages[nbPageIdx].pixels={};writeNb(d);drawPixelGrid();}}}
+          style={btn({background:"rgba(245,87,108,.1)",border:"1px solid rgba(245,87,108,.2)",color:"#f5576c",fontSize:10,padding:"3px 8px"})}>Clear</button>
+        <button onClick={()=>startImageImport(false)} disabled={pixImporting}
+          style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:10,padding:"3px 7px"})}>{pixImporting?"...":"📷36"}</button>
+        <button onClick={()=>startImageImport(true)} disabled={pixImporting}
+          style={btn({background:"rgba(240,147,251,.1)",border:"1px solid rgba(240,147,251,.2)",color:"#f093fb",fontSize:10,padding:"3px 7px"})}>{pixImporting?"...":"📷Full"}</button>
+        <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
+        <button onClick={()=>{setShowPixNumbers(v=>{const nv=!v;setTimeout(drawPixelGrid,10);return nv;});}} style={btn(showPixNumbers?{background:"rgba(254,202,87,.12)",border:"1px solid rgba(254,202,87,.4)",color:"#feca57",fontSize:10,padding:"3px 7px"}:{fontSize:10,padding:"3px 7px",color:"#888"})}>#</button>
         <span style={{fontSize:10,opacity:.3,fontWeight:700}}>Grid:</span>
         {[{v:0,l:"Off"},{v:5,l:"5×5"},{v:10,l:"10×10"},{v:20,l:"20×20"}].map(g=>(
-          <button key={g.v} onClick={()=>setPixelGridLines(g.v)} style={{padding:"3px 8px",borderRadius:6,fontSize:10,fontWeight:700,border:pixelGridLines===g.v?"1px solid rgba(254,202,87,.5)":"1px solid rgba(255,255,255,.06)",background:pixelGridLines===g.v?"rgba(254,202,87,.12)":"transparent",color:pixelGridLines===g.v?"#feca57":"#666",cursor:"pointer"}}>{g.l}</button>))}
+          <button key={g.v} onClick={()=>setPixelGridLines(g.v)} style={{padding:"2px 6px",borderRadius:6,fontSize:10,fontWeight:700,border:pixelGridLines===g.v?"1px solid rgba(254,202,87,.5)":"1px solid rgba(255,255,255,.06)",background:pixelGridLines===g.v?"rgba(254,202,87,.12)":"transparent",color:pixelGridLines===g.v?"#feca57":"#666",cursor:"pointer"}}>{g.l}</button>))}
       </div>
+      {/* Image crop UI */}
+      {pixImgCrop&&<div style={{position:"fixed",inset:0,zIndex:2000,background:"rgba(0,0,0,.9)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:16}}>
+        <div style={{fontSize:14,fontWeight:800,color:"#e8e0f0",marginBottom:8}}>Crop Image</div>
+        <div style={{position:"relative",maxWidth:300,maxHeight:300,marginBottom:12}}>
+          <img src={pixImgCrop.src} style={{maxWidth:300,maxHeight:300,objectFit:"contain",borderRadius:8,opacity:.4}}/>
+          <div style={{position:"absolute",left:`${pixCropBox.x}%`,top:`${pixCropBox.y}%`,width:`${pixCropBox.w}%`,height:`${pixCropBox.h}%`,border:"2px solid #feca57",borderRadius:4,background:"rgba(254,202,87,.08)"}}/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8,width:200}}>
+          {[{k:"x",l:"X %"},{k:"y",l:"Y %"},{k:"w",l:"W %"},{k:"h",l:"H %"}].map(f=>(
+            <div key={f.k}><div style={{fontSize:10,opacity:.4}}>{f.l}</div>
+            <input type="number" min="0" max="100" value={pixCropBox[f.k]} onChange={e=>setPixCropBox(p=>({...p,[f.k]:Math.max(0,Math.min(100,Number(e.target.value)||0))}))}
+              style={{width:"100%",padding:"4px 6px",borderRadius:6,border:"1px solid rgba(254,202,87,.3)",background:"rgba(254,202,87,.06)",color:"#feca57",fontSize:13,textAlign:"center",outline:"none"}}/></div>))}
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={confirmCrop} style={{padding:"8px 20px",borderRadius:10,background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",fontSize:14,fontWeight:700,cursor:"pointer"}}>Convert</button>
+          <button onClick={()=>{setPixImgCrop(null);setPixImporting(false);}} style={{padding:"8px 20px",borderRadius:10,background:"rgba(255,255,255,.06)",color:"#aaa",border:"1px solid rgba(255,255,255,.1)",fontSize:14,fontWeight:700,cursor:"pointer"}}>Cancel</button>
+        </div>
+      </div>}
       <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch"}}>
         <div style={{transform:`scale(${pageZoom})`,transformOrigin:"top left",width:cW/pageZoom,height:cH/pageZoom,minWidth:cW,minHeight:cH}}>
           <canvas ref={pixCanvasCallbackRef} width={cW} height={cH} style={{width:cW,height:cH,touchAction:"pan-x pan-y",cursor:"crosshair",display:"block",imageRendering:"pixelated"}}/>
