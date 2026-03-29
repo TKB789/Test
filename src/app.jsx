@@ -8518,36 +8518,14 @@ const NotebookPanel=()=>{
   const startRename=()=>{const d=readNb();const page=d.pages?.[pageIdxRef.current];setRenameVal(page?.title||"");setRenaming(true);};
   const doRename=()=>{if(!renameVal.trim())return;save("title",renameVal.trim());setRenaming(false);syncState();};
 
-  // ─── INLINE CHECKBOX (works in any note type) ──────────────────
-  // ☑ button inserts "[ ] " at cursor position in textarea
-  const insertCheckbox=()=>{
-    const el=textareaRef.current;if(!el)return;
-    const start=el.selectionStart;const end=el.selectionEnd;const val=el.value;
-    // Find start of current line
-    const lineStart=val.lastIndexOf("\n",start-1)+1;
-    const before=val.slice(0,lineStart);const after=val.slice(lineStart);
-    const newVal=before+"[ ] "+after;
-    el.value=newVal;textRef.current=newVal;
-    el.selectionStart=el.selectionEnd=start+4;
-    el.focus();saveText();
-  };
-  // Toggle checkbox on a specific line: [ ] ↔ [x], and force re-render
-  const[cbTick,setCbTick]=useState(0);
-  const[checklistView,setChecklistView]=useState(false);
+  // ─── SIMPLE CHECKLIST (per-page array, shown below text) ─────
+  const[showChecklist,setShowChecklist]=useState(false);
   const[clNewItem,setClNewItem]=useState("");
-  const toggleInlineCheckbox=(lineIdx)=>{
-    const content=textRef.current||"";
-    const lines=content.split("\n");
-    if(lineIdx>=lines.length)return;
-    const line=lines[lineIdx];
-    if(line.startsWith("[ ] "))lines[lineIdx]="[x] "+line.slice(4);
-    else if(line.startsWith("[x] "))lines[lineIdx]="[ ] "+line.slice(4);
-    else return;
-    const newVal=lines.join("\n");
-    textRef.current=newVal;
-    const el=textareaRef.current;if(el)el.value=newVal;
-    saveText();setCbTick(t=>t+1);
-  };
+  const getChecklist=()=>{const d=readNb();return d.pages?.[pageIdxRef.current]?.checklist||[];};
+  const saveChecklist=(items)=>{save("checklist",items);syncState();};
+  const addClItem=()=>{if(!clNewItem.trim())return;saveChecklist([...getChecklist(),{text:clNewItem.trim(),done:false}]);setClNewItem("");};
+  const toggleClItem=(idx)=>{const items=[...getChecklist()];items[idx]={...items[idx],done:!items[idx].done};saveChecklist(items);};
+  const deleteClItem=(idx)=>{const items=[...getChecklist()];items.splice(idx,1);saveChecklist(items);};
 
   // ─── TOC REORDER ───────────────────────────────────────────────
   const movePageInToc=(idx,dir)=>{const d=readNb();const ni=idx+dir;if(ni<0||ni>=d.pages.length)return;[d.pages[idx],d.pages[ni]]=[d.pages[ni],d.pages[idx]];saveNb(d);setNbExpandedIdx(ni);};
@@ -8712,9 +8690,9 @@ const NotebookPanel=()=>{
     textRef.current=next;if(textareaRef.current)textareaRef.current.value=next;saveText();};
 
   // ─── NAVIGATION ─────────────────────────────────────────────────
-  const goToc=()=>{saveAll();syncState();setPageDrawMode(false);setPageZoom(1);setChecklistView(false);setNbView("toc");};
-  const goPrev=()=>{saveAll();drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=pageIdxRef.current-1;setChecklistView(false);setNbPageIdx(i=>i-1);};
-  const goNext=()=>{saveAll();drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=pageIdxRef.current+1;setChecklistView(false);setNbPageIdx(i=>i+1);};
+  const goToc=()=>{saveAll();syncState();setPageDrawMode(false);setPageZoom(1);setShowChecklist(false);setNbView("toc");};
+  const goPrev=()=>{saveAll();drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=pageIdxRef.current-1;setShowChecklist(false);setNbPageIdx(i=>i-1);};
+  const goNext=()=>{saveAll();drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=pageIdxRef.current+1;setShowChecklist(false);setNbPageIdx(i=>i+1);};
 
   // ─── STYLES ─────────────────────────────────────────────────────
   const hs=20,hcol=hs*1.5,hrow=Math.round(hs*Math.sqrt(3)),hoff=Math.round(hrow/2);
@@ -8826,11 +8804,7 @@ const NotebookPanel=()=>{
           :<span onClick={startRename} style={{fontSize:11,fontWeight:800,color:"#e8e0f0",cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:120}}>{nbPageIdx+1}. {page.title||"Untitled"}</span>}
           <button onClick={()=>hasNext&&goNext()} style={{background:"none",border:"none",fontSize:16,color:hasNext?"#a8b4f0":"#333",cursor:hasNext?"pointer":"default",padding:"4px"}}>▶</button>
         </div>
-        {!pageDrawMode&&page.type!=="pixel"&&!checklistView&&<button onClick={insertCheckbox} style={btn({color:"#aaa",padding:"6px 8px"})} title="Insert checkbox">☑</button>}
-        {!pageDrawMode&&page.type!=="pixel"&&(()=>{const content=textRef.current||"";const hasBoxes=content.includes("[ ] ")||content.includes("[x] ");
-          if(!hasBoxes)return null;
-          return <button onClick={()=>setChecklistView(v=>!v)} style={btn(checklistView?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b",padding:"6px 8px"}:{color:"#aaa",padding:"6px 8px"})} title={checklistView?"Edit text":"List view"}>{checklistView?"📝":"📋"}</button>;
-        })()}
+        {!pageDrawMode&&page.type!=="pixel"&&<button onClick={()=>setShowChecklist(v=>!v)} style={btn(showChecklist?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b",padding:"6px 8px"}:{color:"#aaa",padding:"6px 8px"})}>☑</button>}
         <button onClick={()=>{saveAll();if(!pageDrawMode){setPageZoom(1);}setPageDrawMode(m=>!m);}} style={btn(pageDrawMode?{background:"rgba(240,147,251,.2)",border:"1px solid rgba(240,147,251,.4)",color:"#f093fb"}:{color:"#aaa"})}>{pageDrawMode?"🔡":"🎨"}</button>
         <button onClick={doSave} style={btn(saved?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b"}:{color:"#aaa"})}>{saved?"Saved ✓":"Save"}</button>
       </div>
@@ -8867,39 +8841,27 @@ const NotebookPanel=()=>{
           <PageBg type={page.type}>
             {!pageDrawMode&&<div style={{position:"relative"}}>
               {existingDraw&&<img src={existingDraw} style={{position:"absolute",top:0,left:0,width:"100%",height:800,pointerEvents:"none",opacity:.7,zIndex:2}}/>}
-              {/* Checklist view: rendered view with clickable checkboxes + strikethrough */}
-              {checklistView&&(()=>{const content=textRef.current||"";const lines=content.split("\n");const sty=ts(page.type);
-                const addClItem=()=>{if(!clNewItem.trim())return;const newContent=content+(content&&!content.endsWith("\n")?"\n":"")+"[ ] "+clNewItem.trim();textRef.current=newContent;const el=textareaRef.current;if(el)el.value=newContent;saveText();setClNewItem("");setCbTick(t=>t+1);};
-                const deleteClLine=(li)=>{const newLines=[...lines];newLines.splice(li,1);const nv=newLines.join("\n");textRef.current=nv;const el=textareaRef.current;if(el)el.value=nv;saveText();setCbTick(t=>t+1);};
-                return(<div style={{...sty,minHeight:800,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
-                  {lines.map((line,li)=>{
-                    const isChecked=line.startsWith("[x] ");const isUnchecked=line.startsWith("[ ] ");
-                    if(isChecked||isUnchecked){const txt=line.slice(4);
-                      return(<div key={li+"-"+cbTick} style={{display:"flex",alignItems:"center",minHeight:sty.lineHeight,gap:4}}>
-                        <span onClick={()=>toggleInlineCheckbox(li)} style={{width:22,flexShrink:0,textAlign:"center",fontSize:16,color:isChecked?"#43e97b":"rgba(102,126,234,.5)",cursor:"pointer"}}>{isChecked?"☑":"☐"}</span>
-                        <span style={{flex:1,color:isChecked?"rgba(232,224,240,.3)":"#e8e0f0",textDecoration:isChecked?"line-through":"none"}}>{txt||" "}</span>
-                        <button onClick={()=>deleteClLine(li)} style={{background:"none",border:"none",color:"rgba(245,87,108,.35)",fontSize:14,cursor:"pointer",padding:"2px 4px",flexShrink:0}}>×</button>
-                      </div>);}
-                    return <div key={li} style={{minHeight:sty.lineHeight}}>{line||"\u00A0"}</div>;
-                  })}
-                  {/* Add new checkbox item */}
-                  <div style={{display:"flex",gap:6,marginTop:8,alignItems:"center"}}>
-                    <span style={{width:22,flexShrink:0,textAlign:"center",fontSize:16,color:"rgba(102,126,234,.3)"}}>☐</span>
-                    <input value={clNewItem} onChange={e=>setClNewItem(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addClItem();}}}
-                      placeholder="Add item..." style={{flex:1,padding:"6px 10px",borderRadius:8,border:"1px solid rgba(102,126,234,.15)",background:"rgba(102,126,234,.04)",color:"#e8e0f0",fontSize:14,outline:"none",fontFamily:"'Nunito',sans-serif"}}/>
-                    <button onClick={addClItem} style={{padding:"4px 12px",borderRadius:8,background:"rgba(102,126,234,.12)",border:"1px solid rgba(102,126,234,.25)",color:"#a8b4f0",fontSize:14,fontWeight:700,cursor:"pointer"}}>+</button>
-                  </div>
-                </div>);
-              })()}
-              {/* Normal textarea (hidden when checklist view is active) */}
-              {!checklistView&&<textarea ref={(el)=>{if(el){
+              <textarea ref={(el)=>{if(el){
                 const curIdx=String(pageIdxRef.current);
                 if(el.dataset.loadedIdx!==curIdx){
                   const d=readNb();const content=d.pages?.[pageIdxRef.current]?.content||"";
                   textRef.current=content;el.value=content;el.dataset.loadedIdx=curIdx;
                 }
                 textareaRef.current=el;}}
-              } onInput={onTextInput} onBlur={()=>saveText()} placeholder="Start writing..." style={{...ts(page.type),position:"relative",zIndex:1}}/>}
+              } onInput={onTextInput} onBlur={()=>saveText()} placeholder="Start writing..." style={{...ts(page.type),position:"relative",zIndex:1,minHeight:showChecklist?200:800}}/>
+              {showChecklist&&<div style={{padding:"8px 14px",borderTop:"1px solid rgba(102,126,234,.15)"}}>
+                <div style={{fontSize:11,fontWeight:700,opacity:.3,letterSpacing:1,marginBottom:6}}>CHECKLIST</div>
+                {getChecklist().map((item,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,.04)"}}>
+                  <div onClick={()=>toggleClItem(i)} style={{width:22,height:22,borderRadius:5,border:item.done?"2px solid #43e97b":"2px solid rgba(102,126,234,.4)",background:item.done?"rgba(67,233,123,.15)":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:"#43e97b",flexShrink:0}}>{item.done?"✓":""}</div>
+                  <span style={{flex:1,fontSize:15,color:item.done?"rgba(232,224,240,.3)":"#e8e0f0",textDecoration:item.done?"line-through":"none",wordBreak:"break-word"}}>{item.text}</span>
+                  <button onClick={()=>deleteClItem(i)} style={{background:"none",border:"none",color:"rgba(245,87,108,.35)",fontSize:16,cursor:"pointer",padding:"2px 6px",flexShrink:0}}>×</button>
+                </div>))}
+                <div style={{display:"flex",gap:6,marginTop:6}}>
+                  <input value={clNewItem} onChange={e=>setClNewItem(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addClItem();}}}
+                    placeholder="Add item..." style={{flex:1,padding:"8px 10px",borderRadius:8,border:"1px solid rgba(102,126,234,.15)",background:"rgba(102,126,234,.04)",color:"#e8e0f0",fontSize:14,outline:"none",fontFamily:"'Nunito',sans-serif"}}/>
+                  <button onClick={addClItem} style={{padding:"6px 14px",borderRadius:8,background:"rgba(102,126,234,.12)",border:"1px solid rgba(102,126,234,.25)",color:"#a8b4f0",fontSize:16,fontWeight:700,cursor:"pointer"}}>+</button>
+                </div>
+              </div>}
             </div>}
             {pageDrawMode&&<div style={{position:"relative"}}>
               {(()=>{const baseTs=ts(page.type);const scaledPadding=(()=>{
@@ -11627,7 +11589,7 @@ function SpiritAnimals(){
               {/* Buddy display */}
               <div style={{margin:"8px -4px 6px",borderRadius:12,background:`linear-gradient(180deg,${animalData.color}12 0%,${animalData.accent}08 50%,transparent 100%)`,border:`1px solid ${animalData.accent}18`,padding:"4px 0",display:"flex",alignItems:"center",justifyContent:"center",minHeight:140}}>
                 <div style={{position:"relative"}}>
-                  {allDoneToday&&<div style={{textAlign:"center",position:"absolute",top:-2,left:"50%",transform:"translateX(-50%)",zIndex:3}}><span style={{fontSize:12,color:"#feca57"}}>✅ All done!</span></div>}
+                  {allDoneToday&&<div style={{textAlign:"center",position:"absolute",top:-6,left:"50%",transform:"translateX(-50%)",zIndex:3,background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",borderRadius:20,padding:"4px 14px",whiteSpace:"nowrap",boxShadow:"0 0 12px rgba(67,233,123,.3)"}}><span style={{fontSize:15,fontWeight:800,color:"#43e97b"}}>✅ All Goals Done!</span></div>}
                   {negCount>0&&!allDoneToday&&<div style={{textAlign:"center",position:"absolute",top:-2,left:"50%",transform:"translateX(-50%)",zIndex:3,whiteSpace:"nowrap"}}><span style={{fontSize:11,color:"#f5576c",opacity:.7}}>⚠️ {negCount} effect{negCount>1?"s":""} active</span></div>}
                   <BuddyDisplay animal={appState?.animal} state={{...(appState||{}),_roaming:isRoaming&&!fullBack,auraStreak:streak}} size={130}/>
                 </div>
@@ -11643,13 +11605,17 @@ function SpiritAnimals(){
               </div>
 
               {/* Stats grid */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:4,marginBottom:6}}>
-                {[{l:"POWER",v:duelStats.power,c:"#feca57"},{l:"STREAK",v:`${streak}d`,c:streak>=3?"#f5576c":"#555"},{l:"TODAY",v:`${doneToday.length}/${totalHabits}`,c:"#60a5fa"},{l:"CODE",v:duelCode||"—",c:"#feca57",mono:true}].map(s=>(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginBottom:6}}>
+                {[{l:"POWER",v:duelStats.power,c:"#feca57"},{l:"STREAK",v:`${streak}d`,c:streak>=3?"#f5576c":"#555"},{l:"TODAY",v:`${doneToday.length}/${totalHabits}`,c:"#60a5fa"}].map(s=>(
                   <div key={s.l} style={{background:"rgba(255,255,255,.04)",borderRadius:8,padding:"5px 2px",textAlign:"center",border:"1px solid rgba(255,255,255,.06)"}}>
-                    <div style={{fontSize:s.mono?11:14,fontWeight:900,color:s.c,fontFamily:s.mono?"monospace":"inherit",letterSpacing:s.mono?1:0}}>{s.v}</div>
+                    <div style={{fontSize:14,fontWeight:900,color:s.c}}>{s.v}</div>
                     <div style={{fontSize:9,fontWeight:700,opacity:.3,letterSpacing:1,marginTop:1}}>{s.l}</div>
                   </div>))}
               </div>
+              {duelCode&&<div style={{background:"rgba(255,255,255,.04)",borderRadius:8,padding:"4px 8px",textAlign:"center",border:"1px solid rgba(255,255,255,.06)",marginBottom:6}}>
+                <span style={{fontSize:9,fontWeight:700,opacity:.3,letterSpacing:1}}>CODE </span>
+                <span style={{fontSize:13,fontWeight:900,color:"#feca57",letterSpacing:2,fontFamily:"monospace"}}>{duelCode}</span>
+              </div>}
 
               {/* Level progress */}
               {nextLv&&<div>
