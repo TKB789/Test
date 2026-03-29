@@ -6064,26 +6064,124 @@ const NotebookPanel=()=>{
   // ─── PIXEL ART ──────────────────────────────────────────────────
   const pixCanvasRef=React.useRef(null);const pixIsPainting=React.useRef(false);const pixelUndoRef=React.useRef([]);const pixelRedoRef=React.useRef([]);
   const PIXEL_COLORS=["#f5576c","#feca57","#43e97b","#60a5fa","#f093fb","#fb923c","#22d3ee","#fff","#888","#333"];
-  const PIXEL_SIZES=[{id:"16x16",label:"16×16",desc:"Icon",c:16,r:16},{id:"32x32",label:"32×32",desc:"Sprite",c:32,r:32},{id:"48x48",label:"48×48",desc:"Detailed",c:48,r:48},{id:"64x64",label:"64×64",desc:"Large",c:64,r:64},{id:"128x128",label:"128×128",desc:"HD",c:128,r:128},{id:"256x256",label:"256×256",desc:"Full",c:256,r:256}];
-  const[pixelGridLines,setPixelGridLines]=useState(0); // 0=off, 5=5x5, 10=10x10, 20=20x20
+  const PIXEL_SIZES=[{id:"16x16",label:"16×16",desc:"Icon",c:16,r:16},{id:"32x32",label:"32×32",desc:"Sprite",c:32,r:32},{id:"48x48",label:"48×48",desc:"Detailed",c:48,r:48},{id:"64x64",label:"64×64",desc:"Large",c:64,r:64},{id:"128x128",label:"128×128",desc:"HD",c:128,r:128},{id:"256x256",label:"256×256",desc:"Full",c:256,r:256},{id:"512x512",label:"512×512",desc:"Max",c:512,r:512}];
+  const[pixelGridLines,setPixelGridLines]=useState(0);
+  const[customPixelW,setCustomPixelW]=useState("100");
+  const[customPixelH,setCustomPixelH]=useState("100");
   const getPixels=()=>{const d=readNb();return d.pages?.[nbPageIdx]?.pixels||{};};
-  const getPixelDims=()=>{const d=readNb();const page=d.pages?.[nbPageIdx];return PIXEL_SIZES.find(s=>s.id===(page?.pixelSize||"32x32"))||PIXEL_SIZES[1];};
-  const getPixelCellSize=()=>{const dims=getPixelDims();return Math.max(4,Math.min(20,Math.floor(400/dims.c)));};
+  const getPixelDims=()=>{const d=readNb();const page=d.pages?.[nbPageIdx];const ps=page?.pixelSize||"32x32";
+    const preset=PIXEL_SIZES.find(s=>s.id===ps);if(preset)return preset;
+    // Custom size: parse "CxR" format
+    const m=ps.match(/^(\d+)x(\d+)$/);if(m)return{id:ps,label:`${m[1]}×${m[2]}`,desc:"Custom",c:Number(m[1]),r:Number(m[2])};
+    return PIXEL_SIZES[1];};
+  const getPixelCellSize=()=>{const dims=getPixelDims();return Math.max(2,Math.min(20,Math.floor(400/Math.max(dims.c,dims.r))));};
   const drawPixelGrid=()=>{const c=pixCanvasRef.current;if(!c)return;const ctx=c.getContext("2d");
     const dims=getPixelDims();const cs=getPixelCellSize();const pixels=getPixels();
     ctx.fillStyle="#111";ctx.fillRect(0,0,c.width,c.height);
-    // Fine grid lines — drawn as 1px filled rects for crisp rendering when zoomed
-    ctx.fillStyle="rgba(255,255,255,.08)";
-    for(let x=0;x<=dims.c;x++)ctx.fillRect(x*cs,0,1,dims.r*cs);
-    for(let y=0;y<=dims.r;y++)ctx.fillRect(0,y*cs,dims.c*cs,1);
-    // Draw pixels
+    // Draw pixels first
     Object.entries(pixels).forEach(([key,color])=>{const[r,cl]=key.split("-").map(Number);if(r<dims.r&&cl<dims.c){ctx.fillStyle=color;ctx.fillRect(cl*cs,r*cs,cs,cs);}});
-    // Section borders (10x10, 5x5, etc.)
+    // Fine grid lines on top — subtle, 1px
+    ctx.globalAlpha=0.12;ctx.fillStyle="#fff";
+    for(let x=1;x<dims.c;x++)ctx.fillRect(x*cs,0,1,dims.r*cs);
+    for(let y=1;y<dims.r;y++)ctx.fillRect(0,y*cs,dims.c*cs,1);
+    ctx.globalAlpha=1;
+    // Section borders
     if(pixelGridLines>0){
-      ctx.fillStyle="rgba(255,255,255,.3)";
+      ctx.globalAlpha=0.35;ctx.fillStyle="#fff";
       for(let x=0;x<=dims.c;x+=pixelGridLines)ctx.fillRect(x*cs,0,1,dims.r*cs);
       for(let y=0;y<=dims.r;y+=pixelGridLines)ctx.fillRect(0,y*cs,dims.c*cs,1);
+      ctx.globalAlpha=1;
     }
+  };
+  // ─── IMAGE TO PIXEL ART ────────────────────────────────────────
+  const[pixImporting,setPixImporting]=useState(false);
+  const importImageToPixels=()=>{
+    const input=document.createElement("input");input.type="file";input.accept="image/*";
+    input.onchange=(e)=>{
+      const file=e.target.files[0];if(!file)return;
+      setPixImporting(true);
+      const reader=new FileReader();
+      reader.onload=(ev)=>{
+        const img=new Image();
+        img.onload=()=>{
+          const dims=getPixelDims();
+          // Draw image scaled to grid dimensions on a temp canvas
+          const tc=document.createElement("canvas");tc.width=dims.c;tc.height=dims.r;
+          const tctx=tc.getContext("2d");
+          tctx.imageSmoothingEnabled=true;tctx.imageSmoothingQuality="medium";
+          // Fit image covering the grid (crop to fill)
+          const imgRatio=img.width/img.height;const gridRatio=dims.c/dims.r;
+          let sx=0,sy=0,sw=img.width,sh=img.height;
+          if(imgRatio>gridRatio){const nw=img.height*gridRatio;sx=(img.width-nw)/2;sw=nw;}
+          else{const nh=img.width/gridRatio;sy=(img.height-nh)/2;sh=nh;}
+          tctx.drawImage(img,sx,sy,sw,sh,0,0,dims.c,dims.r);
+          // Sample each pixel and quantize to nearest palette color
+          const data=tctx.getImageData(0,0,dims.c,dims.r).data;
+          const palette=[...PIXEL_COLORS,"#000"];
+          const hexToRgb=(h)=>{const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);return[r,g,b];};
+          const paletteRgb=palette.map(hexToRgb);
+          const rgbToHex=(r,g,b)=>"#"+[r,g,b].map(v=>v.toString(16).padStart(2,"0")).join("");
+          const nearest=(r,g,b)=>{let best=0,bestD=Infinity;paletteRgb.forEach(([pr,pg,pb],i)=>{const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bestD){bestD=d;best=i;}});return palette[best];};
+          const newPixels={};
+          for(let row=0;row<dims.r;row++){for(let col=0;col<dims.c;col++){
+            const idx=(row*dims.c+col)*4;
+            const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];
+            if(a<30)continue; // skip transparent
+            const color=nearest(r,g,b);
+            if(color!=="#000")newPixels[`${row}-${col}`]=color; // skip black (background)
+          }}
+          // Save to page
+          const d=readNb();if(d.pages?.[pageIdxRef.current]){
+            d.pages[pageIdxRef.current].pixels=newPixels;writeNb(d);setNbData(d);
+          }
+          drawPixelGrid();setPixImporting(false);
+        };
+        img.src=ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
+  // Import with full colors (no palette quantization)
+  const importImageFullColor=()=>{
+    const input=document.createElement("input");input.type="file";input.accept="image/*";
+    input.onchange=(e)=>{
+      const file=e.target.files[0];if(!file)return;
+      setPixImporting(true);
+      const reader=new FileReader();
+      reader.onload=(ev)=>{
+        const img=new Image();
+        img.onload=()=>{
+          const dims=getPixelDims();
+          const tc=document.createElement("canvas");tc.width=dims.c;tc.height=dims.r;
+          const tctx=tc.getContext("2d");
+          tctx.imageSmoothingEnabled=true;tctx.imageSmoothingQuality="medium";
+          const imgRatio=img.width/img.height;const gridRatio=dims.c/dims.r;
+          let sx=0,sy=0,sw=img.width,sh=img.height;
+          if(imgRatio>gridRatio){const nw=img.height*gridRatio;sx=(img.width-nw)/2;sw=nw;}
+          else{const nh=img.width/gridRatio;sy=(img.height-nh)/2;sh=nh;}
+          tctx.drawImage(img,sx,sy,sw,sh,0,0,dims.c,dims.r);
+          const data=tctx.getImageData(0,0,dims.c,dims.r).data;
+          const rgbToHex=(r,g,b)=>"#"+[r,g,b].map(v=>v.toString(16).padStart(2,"0")).join("");
+          const newPixels={};
+          for(let row=0;row<dims.r;row++){for(let col=0;col<dims.c;col++){
+            const idx=(row*dims.c+col)*4;
+            const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];
+            if(a<30)continue;
+            const lum=r*0.299+g*0.587+b*0.114;
+            if(lum<15)continue; // skip near-black
+            newPixels[`${row}-${col}`]=rgbToHex(r,g,b);
+          }}
+          const d=readNb();if(d.pages?.[pageIdxRef.current]){
+            d.pages[pageIdxRef.current].pixels=newPixels;writeNb(d);setNbData(d);
+          }
+          drawPixelGrid();setPixImporting(false);
+        };
+        img.src=ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
   };
   const setPixel=(row,col,color,erase)=>{const dims=getPixelDims();if(row<0||row>=dims.r||col<0||col>=dims.c)return;
     const key=`${row}-${col}`;const d=readNb();if(!d.pages?.[nbPageIdx])return;
@@ -6094,23 +6192,20 @@ const NotebookPanel=()=>{
     pixelUndoRef.current.push({key,old,newVal});pixelRedoRef.current=[];
     d.pages[nbPageIdx].pixels=pixels;writeNb(d);
     const c=pixCanvasRef.current;if(c){const ctx=c.getContext("2d");const cs=getPixelCellSize();
-      ctx.fillStyle=pixels[key]||"#111";ctx.fillRect(col*cs,row*cs,cs,cs);
-      ctx.fillStyle="rgba(255,255,255,.08)";ctx.fillRect(col*cs,row*cs,1,cs);ctx.fillRect(col*cs,row*cs,cs,1);ctx.fillRect((col+1)*cs,row*cs,1,cs);ctx.fillRect(col*cs,(row+1)*cs,cs,1);}};
+      ctx.fillStyle=pixels[key]||"#111";ctx.fillRect(col*cs,row*cs,cs,cs);}};
   const undoPixel=()=>{if(!pixelUndoRef.current.length)return;const entry=pixelUndoRef.current.pop();
     const{key,old}=entry;
     const d=readNb();if(!d.pages?.[nbPageIdx])return;const pixels=d.pages[nbPageIdx].pixels||{};
     const cur=pixels[key]||null;
     if(old)pixels[key]=old;else delete pixels[key];d.pages[nbPageIdx].pixels=pixels;writeNb(d);
     pixelRedoRef.current.push({key,old:cur,newVal:old});
-    const c=pixCanvasRef.current;if(c){const ctx=c.getContext("2d");const cs=getPixelCellSize();const[r,cl]=key.split("-").map(Number);
-      ctx.fillStyle=old||"#111";ctx.fillRect(cl*cs,r*cs,cs,cs);ctx.fillStyle="rgba(255,255,255,.08)";ctx.fillRect(cl*cs,r*cs,1,cs);ctx.fillRect(cl*cs,r*cs,cs,1);ctx.fillRect((cl+1)*cs,r*cs,1,cs);ctx.fillRect(cl*cs,(r+1)*cs,cs,1);}};
+    drawPixelGrid();};
   const redoPixel=()=>{if(!pixelRedoRef.current.length)return;const entry=pixelRedoRef.current.pop();
     const{key,old,newVal}=entry;
     const d=readNb();if(!d.pages?.[nbPageIdx])return;const pixels=d.pages[nbPageIdx].pixels||{};
     if(newVal)pixels[key]=newVal;else delete pixels[key];d.pages[nbPageIdx].pixels=pixels;writeNb(d);
     pixelUndoRef.current.push({key,old,newVal});
-    const c=pixCanvasRef.current;if(c){const ctx=c.getContext("2d");const cs=getPixelCellSize();const[r,cl]=key.split("-").map(Number);
-      ctx.fillStyle=newVal||"#111";ctx.fillRect(cl*cs,r*cs,cs,cs);ctx.fillStyle="rgba(255,255,255,.08)";ctx.fillRect(cl*cs,r*cs,1,cs);ctx.fillRect(cl*cs,r*cs,cs,1);ctx.fillRect((cl+1)*cs,r*cs,1,cs);ctx.fillRect(cl*cs,(r+1)*cs,cs,1);}};;
+    drawPixelGrid();};
   const pixColorRef=React.useRef(pixelColor);pixColorRef.current=pixelColor;
   const pixEraserRef=React.useRef(pixelEraser);pixEraserRef.current=pixelEraser;
   const handlePixEvent=(e,isStart)=>{if(e.touches&&e.touches.length>1)return;
@@ -6243,6 +6338,10 @@ const NotebookPanel=()=>{
         {PIXEL_COLORS.map(c=>(<div key={c} onClick={()=>{setPixelColor(c);setPixelEraser(false);}} style={{width:24,height:24,borderRadius:5,background:c,border:pixelColor===c&&!pixelEraser?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer",opacity:pixelEraser?.4:1,transition:"opacity .15s"}}/>))}
         <button onClick={()=>{if(!confirm("Clear all?"))return;const d=readNb();if(d.pages?.[nbPageIdx]){d.pages[nbPageIdx].pixels={};writeNb(d);drawPixelGrid();}}}
           style={btn({background:"rgba(245,87,108,.1)",border:"1px solid rgba(245,87,108,.2)",color:"#f5576c",fontSize:11,padding:"4px 10px"})}>Clear</button>
+        <button onClick={importImageToPixels} disabled={pixImporting}
+          style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:11,padding:"4px 8px"})}>{pixImporting?"...":"📷 Palette"}</button>
+        <button onClick={importImageFullColor} disabled={pixImporting}
+          style={btn({background:"rgba(240,147,251,.1)",border:"1px solid rgba(240,147,251,.2)",color:"#f093fb",fontSize:11,padding:"4px 8px"})}>{pixImporting?"...":"📷 Full"}</button>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:3,padding:"0 10px 4px",flexShrink:0}}>
         <span style={{fontSize:10,opacity:.3,fontWeight:700}}>Grid:</span>
@@ -6361,10 +6460,23 @@ const NotebookPanel=()=>{
           {PIXEL_SIZES.map(s=>(<button key={s.id} onClick={()=>setNbPixelSize(s.id)}
             style={{padding:"4px 8px",borderRadius:6,border:nbPixelSize===s.id?"1px solid rgba(254,202,87,.5)":"1px solid rgba(255,255,255,.08)",
               background:nbPixelSize===s.id?"rgba(254,202,87,.12)":"rgba(255,255,255,.03)",color:nbPixelSize===s.id?"#feca57":"#888",fontSize:10,fontWeight:700,cursor:"pointer"}}>{s.label}<div style={{fontSize:9,opacity:.5}}>{s.desc}</div></button>))}
-        </div></div>}
+          <button onClick={()=>setNbPixelSize("custom")}
+            style={{padding:"4px 8px",borderRadius:6,border:nbPixelSize==="custom"?"1px solid rgba(254,202,87,.5)":"1px solid rgba(255,255,255,.08)",
+              background:nbPixelSize==="custom"?"rgba(254,202,87,.12)":"rgba(255,255,255,.03)",color:nbPixelSize==="custom"?"#feca57":"#888",fontSize:10,fontWeight:700,cursor:"pointer"}}>✏️<div style={{fontSize:9,opacity:.5}}>Custom</div></button>
+        </div>
+        {nbPixelSize==="custom"&&<div style={{display:"flex",gap:4,alignItems:"center",marginTop:6}}>
+          <input value={customPixelW} onChange={e=>setCustomPixelW(e.target.value.replace(/\D/g,""))} placeholder="W" style={{width:56,padding:"5px 8px",borderRadius:6,border:"1px solid rgba(254,202,87,.3)",background:"rgba(254,202,87,.06)",color:"#feca57",fontSize:13,fontWeight:700,textAlign:"center",outline:"none"}}/>
+          <span style={{color:"#888",fontSize:13}}>×</span>
+          <input value={customPixelH} onChange={e=>setCustomPixelH(e.target.value.replace(/\D/g,""))} placeholder="H" style={{width:56,padding:"5px 8px",borderRadius:6,border:"1px solid rgba(254,202,87,.3)",background:"rgba(254,202,87,.06)",color:"#feca57",fontSize:13,fontWeight:700,textAlign:"center",outline:"none"}}/>
+          <span style={{fontSize:10,opacity:.3}}>max 512</span>
+        </div>}
+      </div>}
       <button onClick={()=>{const title=nbNewTitle.trim()||`Page ${nbData.pages.length+1}`;
         const np={title,type:nbNewType,content:"",drawData:null,pixels:{},created:Date.now()};
-        if(nbNewType==="pixel")np.pixelSize=nbPixelSize;
+        if(nbNewType==="pixel"){
+          if(nbPixelSize==="custom"){const w=Math.max(4,Math.min(512,Number(customPixelW)||32));const h=Math.max(4,Math.min(512,Number(customPixelH)||32));np.pixelSize=`${w}x${h}`;}
+          else np.pixelSize=nbPixelSize;
+        }
         const d=readNb();d.pages.push(np);saveNb(d);setNbNewTitle("");
         const newIdx=d.pages.length-1;pageIdxRef.current=newIdx;
         drawImgRef.current=null;drawCanvasRef.current=null;textRef.current="";
