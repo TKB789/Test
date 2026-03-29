@@ -8519,31 +8519,26 @@ const NotebookPanel=()=>{
   const doRename=()=>{if(!renameVal.trim())return;save("title",renameVal.trim());setRenaming(false);syncState();};
   const switchPageType=(newType)=>{save("type",newType);syncState();};
 
-  // ─── INLINE CHECKBOX — inserts ☐/☑ characters into text ─────
-  const insertCheckbox=()=>{
-    const el=textareaRef.current;if(!el)return;
-    const start=el.selectionStart;const val=el.value;
-    const newVal=val.slice(0,start)+"☐ "+val.slice(start);
-    el.value=newVal;textRef.current=newVal;
-    el.selectionStart=el.selectionEnd=start+2;
-    el.focus();saveText();
-  };
-  const toggleCheckboxAtCursor=()=>{
+  // ─── INLINE CHECKBOX — single tap: toggle if on checkbox line, else insert ☐
+  const handleCheckbox=()=>{
     const el=textareaRef.current;if(!el)return;
     const pos=el.selectionStart;const val=el.value;
-    // Find nearest ☐ or ☑ before or at cursor on same line
     const lineStart=val.lastIndexOf("\n",pos-1)+1;
     const lineEnd=val.indexOf("\n",pos);const le=lineEnd===-1?val.length:lineEnd;
     const line=val.slice(lineStart,le);
     const unchecked=line.indexOf("☐");const checked=line.indexOf("☑");
-    let idx=-1,wasDone=false;
-    if(unchecked>=0&&(checked<0||unchecked<checked)){idx=lineStart+unchecked;wasDone=false;}
-    else if(checked>=0){idx=lineStart+checked;wasDone=true;}
-    if(idx<0)return;
-    const newVal=val.slice(0,idx)+(wasDone?"☐":"☑")+val.slice(idx+1);
-    el.value=newVal;textRef.current=newVal;
-    el.selectionStart=el.selectionEnd=pos;
-    saveText();
+    if(unchecked>=0||checked>=0){
+      // Toggle existing checkbox on this line
+      let idx,wasDone;
+      if(unchecked>=0&&(checked<0||unchecked<checked)){idx=lineStart+unchecked;wasDone=false;}
+      else{idx=lineStart+checked;wasDone=true;}
+      const newVal=val.slice(0,idx)+(wasDone?"☐":"☑")+val.slice(idx+1);
+      el.value=newVal;textRef.current=newVal;el.selectionStart=el.selectionEnd=pos;saveText();
+    }else{
+      // No checkbox on line — insert one at cursor
+      const newVal=val.slice(0,pos)+"☐ "+val.slice(pos);
+      el.value=newVal;textRef.current=newVal;el.selectionStart=el.selectionEnd=pos+2;el.focus();saveText();
+    }
   };
 
   // ─── TOC REORDER ───────────────────────────────────────────────
@@ -8823,7 +8818,7 @@ const NotebookPanel=()=>{
           :<span onClick={startRename} style={{fontSize:11,fontWeight:800,color:"#e8e0f0",cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:120}}>{nbPageIdx+1}. {page.title||"Untitled"}</span>}
           <button onClick={()=>hasNext&&goNext()} style={{background:"none",border:"none",fontSize:16,color:hasNext?"#a8b4f0":"#333",cursor:hasNext?"pointer":"default",padding:"4px"}}>▶</button>
         </div>
-        {!pageDrawMode&&page.type!=="pixel"&&<button onClick={insertCheckbox} onDoubleClick={toggleCheckboxAtCursor} style={btn({color:"#aaa",padding:"6px 8px"})} title="Tap: add checkbox. Double-tap: toggle nearest">☑</button>}
+        {!pageDrawMode&&page.type!=="pixel"&&<button onClick={handleCheckbox} style={btn({color:"#aaa",padding:"6px 8px"})}>☑</button>}
         <button onClick={()=>{saveAll();if(!pageDrawMode){setPageZoom(1);}setPageDrawMode(m=>!m);}} style={btn(pageDrawMode?{background:"rgba(240,147,251,.2)",border:"1px solid rgba(240,147,251,.4)",color:"#f093fb"}:{color:"#aaa"})}>{pageDrawMode?"🔡":"🎨"}</button>
         <button onClick={doSave} style={btn(saved?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b"}:{color:"#aaa"})}>{saved?"Saved ✓":"Save"}</button>
       </div>
@@ -11598,11 +11593,15 @@ function SpiritAnimals(){
               {/* Buddy display */}
               <div style={{margin:"8px -4px 6px",borderRadius:12,background:`linear-gradient(180deg,${animalData.color}12 0%,${animalData.accent}08 50%,transparent 100%)`,border:`1px solid ${animalData.accent}18`,padding:"4px 0",display:"flex",alignItems:"center",justifyContent:"center",minHeight:140}}>
                 <div style={{position:"relative"}}>
-                  {allDoneToday&&<div style={{textAlign:"center",position:"absolute",top:-6,left:"50%",transform:"translateX(-50%)",zIndex:3,background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",borderRadius:20,padding:"4px 14px",whiteSpace:"nowrap",boxShadow:"0 0 12px rgba(67,233,123,.3)"}}><span style={{fontSize:15,fontWeight:800,color:"#43e97b"}}>✅ All Goals Done!</span></div>}
                   {negCount>0&&!allDoneToday&&<div style={{textAlign:"center",position:"absolute",top:-2,left:"50%",transform:"translateX(-50%)",zIndex:3,whiteSpace:"nowrap"}}><span style={{fontSize:11,color:"#f5576c",opacity:.7}}>⚠️ {negCount} effect{negCount>1?"s":""} active</span></div>}
                   <BuddyDisplay animal={appState?.animal} state={{...(appState||{}),_roaming:isRoaming&&!fullBack,auraStreak:streak}} size={130}/>
                 </div>
               </div>
+
+              {/* All Goals Completed */}
+              {allDoneToday&&<div style={{textAlign:"center",marginBottom:6}}>
+                <span style={{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",borderRadius:20,padding:"4px 14px",fontSize:14,fontWeight:800,color:"#43e97b",boxShadow:"0 0 12px rgba(67,233,123,.3)"}}>✅ All Goals Completed</span>
+              </div>}
 
               {/* HP bar */}
               <div style={{marginBottom:8}}>
