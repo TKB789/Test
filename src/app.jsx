@@ -9070,7 +9070,7 @@ const LearnPanel=()=>{
         ))}
       </div>
       {learnTab==="picks"&&<div style={{flex:1,overflowY:"auto",padding:"0 14px 14px"}}>
-        <Card icon="💬" title="Daily Quote" color="rgba(254,202,87)" id="quote" onFav={()=>toggleSimpleFav("quotes",{q:quote.q,a:quote.a},x=>x.q===quote.q)} isFav={isSimpleFav("quotes",x=>x.q===quote.q)}><div style={{fontSize:16,fontStyle:"italic",lineHeight:1.5,opacity:.8}}>"{quote.q}"</div><div style={{fontSize:14,opacity:.4,marginTop:4}}>— {quote.a}</div></Card>
+        <Card icon="💬" title="Daily Quote" color="rgba(254,202,87)" id="quote" onFav={()=>toggleSimpleFav("quotes",{q:quote.text,a:quote.author},x=>x.q===quote.text)} isFav={isSimpleFav("quotes",x=>x.q===quote.text)}><div style={{fontSize:16,fontStyle:"italic",lineHeight:1.5,opacity:.8}}>"{quote.text}"</div><div style={{fontSize:14,opacity:.4,marginTop:4}}>— {quote.author}</div></Card>
         <Card icon="🧠" title={apiFact?"Random Fact":"Fun Fact"} color="rgba(67,233,123)" id="fact" onFav={()=>toggleSimpleFav("facts",{text:displayFact},x=>x.text===displayFact)} isFav={isSimpleFav("facts",x=>x.text===displayFact)}>{apiLoading&&!apiFact?<div style={{fontSize:14,opacity:.4}}>Loading...</div>:<div style={{fontSize:16,lineHeight:1.5,opacity:.75}}>{displayFact}</div>}</Card>
         <Card icon="🧩" title={apiTrivia?"Trivia: "+apiTrivia[0].category:"Brain Teaser"} color="rgba(192,132,252)" id="teaser">
           <div style={{fontSize:16,lineHeight:1.5,opacity:.8,marginBottom:6}}>{displayTrivia.question}</div>
