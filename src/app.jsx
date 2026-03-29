@@ -5941,6 +5941,15 @@ const NotebookPanel=()=>{
   const[nbSetPw,setNbSetPw]=useState("");
   const[nbSetPw2,setNbSetPw2]=useState("");
   const[nbExpandedIdx,setNbExpandedIdx]=useState(null);
+  const[nbPreviewMode,setNbPreviewMode]=useState(()=>{try{return localStorage.getItem("zobuddy_nb_preview")!=="false";}catch{return true;}});
+  const togglePreviewMode=()=>{const nv=!nbPreviewMode;setNbPreviewMode(nv);try{localStorage.setItem("zobuddy_nb_preview",String(nv));}catch{}};
+
+  // Delete/archive from within an open page
+  const archiveCurrentPage=()=>{const idx=pageIdxRef.current;const d=readNb();if(!d.pages?.[idx])return;
+    d.archive.push(d.pages[idx]);d.pages.splice(idx,1);saveNb(d);setNbView("toc");};
+  const deleteCurrentPage=()=>{const idx=pageIdxRef.current;const d=readNb();if(!d.pages?.[idx])return;
+    if(!confirm(`Delete "${d.pages[idx].title||"Untitled"}"?`))return;
+    d.pages.splice(idx,1);saveNb(d);setNbView("toc");};
   const[pageZoom,setPageZoom]=useState(1);
   const[pageDrawMode,setPageDrawMode]=useState(false);
   const[drawColor,setDrawColor]=useState("#fff");
@@ -6184,29 +6193,34 @@ const NotebookPanel=()=>{
   const pixColorRef=React.useRef(pixelColor);pixColorRef.current=pixelColor;
   const pixEraserRef=React.useRef(pixelEraser);pixEraserRef.current=pixelEraser;
   const pixStartPos=React.useRef(null);const pixMoved=React.useRef(false);const pixCancelled=React.useRef(false);
+  // Pinch zoom
+  const pixPinchDist=React.useRef(null);
   const handlePixEvent=(e,isStart)=>{
-    // Two+ fingers = gesture (pinch/zoom/scroll) — cancel any painting
-    if(e.touches&&e.touches.length>1){pixIsPainting.current=false;pixStartPos.current=null;pixCancelled.current=true;return;}
+    // Two+ fingers = pinch zoom — cancel painting
+    if(e.touches&&e.touches.length>1){
+      pixIsPainting.current=false;pixCancelled.current=true;
+      const t1=e.touches[0],t2=e.touches[1];
+      const dist=Math.hypot(t1.clientX-t2.clientX,t1.clientY-t2.clientY);
+      if(pixPinchDist.current!==null){
+        const scale=dist/pixPinchDist.current;
+        if(Math.abs(scale-1)>0.02)setPageZoom(z=>Math.max(0.3,Math.min(8,z*scale)));
+      }
+      pixPinchDist.current=dist;
+      e.preventDefault();return;
+    }
+    pixPinchDist.current=null;
     const t=e.touches?e.touches[0]:e;
     if(isStart){
-      pixStartPos.current={x:t.clientX,y:t.clientY};pixMoved.current=false;pixIsPainting.current=true;pixCancelled.current=false;
-      if(!e.touches){e.preventDefault();paintPixAt(t);} // mouse: paint immediately
+      pixIsPainting.current=true;pixCancelled.current=false;
+      e.preventDefault();paintPixAt(t);
       return;
     }
     if(!pixIsPainting.current||pixCancelled.current)return;
-    // Check if finger moved far enough to be a scroll
-    if(e.touches&&pixStartPos.current){
-      const dx=Math.abs(t.clientX-pixStartPos.current.x),dy=Math.abs(t.clientY-pixStartPos.current.y);
-      if(dx>8||dy>8){pixIsPainting.current=false;pixStartPos.current=null;return;}
-    }
-    e.preventDefault();paintPixAt(t);pixMoved.current=true;
+    e.preventDefault();paintPixAt(t);
   };
   const handlePixEnd=(e)=>{
-    // Only paint on tap if: single finger, didn't move, wasn't cancelled by gesture
-    if(pixIsPainting.current&&!pixMoved.current&&!pixCancelled.current&&pixStartPos.current&&e.changedTouches){
-      const t=e.changedTouches[0];e.preventDefault();paintPixAt(t);
-    }
-    pixIsPainting.current=false;pixStartPos.current=null;pixCancelled.current=false;
+    pixPinchDist.current=null;
+    pixIsPainting.current=false;pixCancelled.current=false;
   };
   const paintPixAt=(t)=>{
     const c=pixCanvasRef.current;if(!c)return;
@@ -6326,6 +6340,8 @@ const NotebookPanel=()=>{
             <button onClick={()=>hasNext&&goNext()} style={{background:"none",border:"none",fontSize:16,color:hasNext?"#a8b4f0":"#333",cursor:hasNext?"pointer":"default",padding:"4px"}}>▶</button>
           </div>
         <button onClick={doSave} style={btn(saved?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b"}:{color:"#aaa"})}>{saved?"Saved ✓":"Save"}</button>
+        <button onClick={archiveCurrentPage} style={btn({color:"#888",padding:"6px 6px",fontSize:12})}>🗃️</button>
+        <button onClick={deleteCurrentPage} style={btn({color:"#888",padding:"6px 6px",fontSize:12})}>🗑️</button>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 6px",flexShrink:0,flexWrap:"wrap"}}>
         <button onClick={()=>setPixelEraser(e=>!e)} style={btn(pixelEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",boxShadow:"0 0 8px rgba(245,87,108,.3)"}:{color:"#ccc"})}>
@@ -6375,6 +6391,8 @@ const NotebookPanel=()=>{
         {!pageDrawMode&&page.type!=="pixel"&&<button onClick={handleCheckbox} style={btn({color:"#aaa",padding:"6px 8px"})}>☑</button>}
         <button onClick={()=>{saveAll();if(!pageDrawMode){setPageZoom(1);}setPageDrawMode(m=>!m);}} style={btn(pageDrawMode?{background:"rgba(240,147,251,.2)",border:"1px solid rgba(240,147,251,.4)",color:"#f093fb"}:{color:"#aaa"})}>{pageDrawMode?"🔡":"🎨"}</button>
         <button onClick={doSave} style={btn(saved?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b"}:{color:"#aaa"})}>{saved?"Saved ✓":"Save"}</button>
+        <button onClick={archiveCurrentPage} style={btn({color:"#888",padding:"6px 6px",fontSize:12})}>🗃️</button>
+        <button onClick={deleteCurrentPage} style={btn({color:"#888",padding:"6px 6px",fontSize:12})}>🗑️</button>
       </div>
       {pageDrawMode&&<div style={{display:"flex",flexDirection:"column",gap:4,padding:"2px 10px 6px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:5}}>
@@ -6443,6 +6461,7 @@ const NotebookPanel=()=>{
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
       <span style={{fontSize:16,fontWeight:900,color:"#e8e0f0"}}>📓 Notebook</span>
       <div style={{display:"flex",gap:4}}>
+        <button onClick={togglePreviewMode} style={btn({fontSize:11,padding:"4px 8px",color:nbPreviewMode?"#a8b4f0":"#888",background:nbPreviewMode?"rgba(102,126,234,.12)":"transparent"})}>{nbPreviewMode?"👁":"👁‍🗨"}</button>
         <button onClick={()=>setNbView("archive")} style={btn({fontSize:11,padding:"4px 8px",color:"#888"})}>🗃️ {nbData.archive.length}</button>
         <button onClick={()=>setNbView("newpw")} style={btn({fontSize:11,padding:"4px 8px",color:"#888"})}>{nbData.pwHash?"🔐":"🔓"}</button>
       </div></div>
@@ -6485,23 +6504,30 @@ const NotebookPanel=()=>{
     </div>
     {nbData.pages.length===0&&<div style={{textAlign:"center",opacity:.3,padding:20}}>No pages yet</div>}
     {nbData.pages.map((p,i)=>{
-      const isExpanded=nbExpandedIdx===i;
+      const isExpanded=nbPreviewMode&&nbExpandedIdx===i;
+      const openPage=()=>{drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=i;setNbPageIdx(i);setNbView("page");};
       return(<div key={i} style={{background:isExpanded?"rgba(255,255,255,.05)":"rgba(255,255,255,.03)",border:isExpanded?"1px solid rgba(102,126,234,.2)":"1px solid rgba(255,255,255,.06)",borderRadius:10,padding:"10px 12px",marginBottom:4,cursor:"pointer"}}>
-        <div onClick={()=>setNbExpandedIdx(isExpanded?null:i)} style={{display:"flex",alignItems:"center",gap:10}}>
+        <div onClick={()=>{if(nbPreviewMode)setNbExpandedIdx(isExpanded?null:i);else openPage();}} style={{display:"flex",alignItems:"center",gap:10}}>
           <span style={{fontSize:13,fontWeight:800,color:"rgba(102,126,234,.6)",minWidth:28}}>{i+1}.</span>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:14,fontWeight:700,color:"#e8e0f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title||"Untitled"}</div>
             <div style={{fontSize:11,opacity:.3}}>{p.type==="pixel"?"🟨 "+(p.pixelSize||"32x32"):`📝 ${p.type}`}{p.drawData?" + 🎨":""}</div></div>
-          <span style={{fontSize:14,opacity:.3,transition:"transform .2s",transform:isExpanded?"rotate(90deg)":"none"}}>▶</span>
+          {nbPreviewMode&&<span style={{fontSize:14,opacity:.3,transition:"transform .2s",transform:isExpanded?"rotate(90deg)":"none"}}>▶</span>}
         </div>
         {isExpanded&&<div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,.06)"}}>
           {/* Preview */}
           {p.type!=="pixel"&&p.content&&<div style={{fontSize:13,color:"rgba(232,224,240,.5)",lineHeight:1.5,marginBottom:8,maxHeight:60,overflow:"hidden",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{p.content.slice(0,150)}{p.content.length>150?"…":""}</div>}
           {p.type!=="pixel"&&!p.content&&!p.drawData&&<div style={{fontSize:12,opacity:.25,marginBottom:8,fontStyle:"italic"}}>Empty page</div>}
-          {p.type==="pixel"&&<div style={{fontSize:12,opacity:.35,marginBottom:8}}>{Object.keys(p.pixels||{}).length} pixels drawn · {p.pixelSize||"32x32"}</div>}
+          {p.type==="pixel"&&<div style={{marginBottom:8}}><div style={{fontSize:12,opacity:.35,marginBottom:4}}>{Object.keys(p.pixels||{}).length} pixels · {p.pixelSize||"32x32"}</div>
+            {Object.keys(p.pixels||{}).length>0&&(()=>{const dims=PIXEL_SIZES.find(s=>s.id===(p.pixelSize||"32x32"))||(()=>{const m=(p.pixelSize||"").match(/^(\d+)x(\d+)$/);return m?{c:+m[1],r:+m[2]}:{c:32,r:32};})();
+              const ps=Math.max(1,Math.floor(200/Math.max(dims.c,dims.r)));
+              return <canvas ref={el=>{if(!el)return;const ctx=el.getContext("2d");ctx.fillStyle="#111";ctx.fillRect(0,0,el.width,el.height);
+                Object.entries(p.pixels||{}).forEach(([k,color])=>{const[r,c]=k.split("-").map(Number);ctx.fillStyle=color;ctx.fillRect(c*ps,r*ps,ps,ps);});
+              }} width={dims.c*ps} height={dims.r*ps} style={{width:Math.min(200,dims.c*ps),height:"auto",borderRadius:4,border:"1px solid rgba(255,255,255,.06)",imageRendering:"pixelated"}}/>;
+            })()}</div>}
           {p.drawData&&<img src={p.drawData} style={{width:"100%",maxHeight:80,objectFit:"contain",borderRadius:6,border:"1px solid rgba(255,255,255,.06)",marginBottom:8,opacity:.6}}/>}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:4}}>
-          <button onClick={()=>{drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=i;setNbPageIdx(i);setNbView("page");}}
+          <button onClick={openPage}
             style={{padding:"6px 16px",borderRadius:8,background:"rgba(102,126,234,.12)",border:"1px solid rgba(102,126,234,.25)",color:"#a8b4f0",fontSize:12,fontWeight:700,cursor:"pointer"}}>Open</button>
           <div style={{display:"flex",gap:2}}>
             <button onClick={(e)=>{e.stopPropagation();movePageInToc(i,-1);}} disabled={i===0} style={{padding:"4px 8px",borderRadius:6,background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.08)",color:i===0?"rgba(255,255,255,.15)":"#aaa",fontSize:12,cursor:i===0?"default":"pointer",fontWeight:700}}>▲</button>
