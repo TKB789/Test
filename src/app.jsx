@@ -6095,92 +6095,67 @@ const NotebookPanel=()=>{
   };
   // ─── IMAGE TO PIXEL ART ────────────────────────────────────────
   const[pixImporting,setPixImporting]=useState(false);
-  const importImageToPixels=()=>{
-    const input=document.createElement("input");input.type="file";input.accept="image/*";
-    input.onchange=(e)=>{
-      const file=e.target.files[0];if(!file)return;
-      setPixImporting(true);
-      const reader=new FileReader();
-      reader.onload=(ev)=>{
-        const img=new Image();
-        img.onload=()=>{
-          const dims=getPixelDims();
-          // Draw image scaled to grid dimensions on a temp canvas
-          const tc=document.createElement("canvas");tc.width=dims.c;tc.height=dims.r;
-          const tctx=tc.getContext("2d");
-          tctx.imageSmoothingEnabled=true;tctx.imageSmoothingQuality="medium";
-          // Fit image covering the grid (crop to fill)
-          const imgRatio=img.width/img.height;const gridRatio=dims.c/dims.r;
-          let sx=0,sy=0,sw=img.width,sh=img.height;
-          if(imgRatio>gridRatio){const nw=img.height*gridRatio;sx=(img.width-nw)/2;sw=nw;}
-          else{const nh=img.width/gridRatio;sy=(img.height-nh)/2;sh=nh;}
-          tctx.drawImage(img,sx,sy,sw,sh,0,0,dims.c,dims.r);
-          // Sample each pixel and quantize to nearest palette color
-          const data=tctx.getImageData(0,0,dims.c,dims.r).data;
-          const palette=[...PIXEL_COLORS,"#000"];
-          const hexToRgb=(h)=>{const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);return[r,g,b];};
-          const paletteRgb=palette.map(hexToRgb);
-          const rgbToHex=(r,g,b)=>"#"+[r,g,b].map(v=>v.toString(16).padStart(2,"0")).join("");
-          const nearest=(r,g,b)=>{let best=0,bestD=Infinity;paletteRgb.forEach(([pr,pg,pb],i)=>{const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bestD){bestD=d;best=i;}});return palette[best];};
-          const newPixels={};
-          for(let row=0;row<dims.r;row++){for(let col=0;col<dims.c;col++){
-            const idx=(row*dims.c+col)*4;
-            const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];
-            if(a<30)continue; // skip transparent
-            const color=nearest(r,g,b);
-            if(color!=="#000")newPixels[`${row}-${col}`]=color; // skip black (background)
-          }}
-          // Save to page
-          const d=readNb();if(d.pages?.[pageIdxRef.current]){
-            d.pages[pageIdxRef.current].pixels=newPixels;writeNb(d);setNbData(d);
-          }
-          drawPixelGrid();setPixImporting(false);
-        };
-        img.src=ev.target.result;
-      };
-      reader.readAsDataURL(file);
-    };
-    input.click();
-  };
-  // Import with full colors (no palette quantization)
-  const importImageFullColor=()=>{
-    const input=document.createElement("input");input.type="file";input.accept="image/*";
-    input.onchange=(e)=>{
-      const file=e.target.files[0];if(!file)return;
-      setPixImporting(true);
-      const reader=new FileReader();
-      reader.onload=(ev)=>{
-        const img=new Image();
-        img.onload=()=>{
-          const dims=getPixelDims();
-          const tc=document.createElement("canvas");tc.width=dims.c;tc.height=dims.r;
-          const tctx=tc.getContext("2d");
-          tctx.imageSmoothingEnabled=true;tctx.imageSmoothingQuality="medium";
-          const imgRatio=img.width/img.height;const gridRatio=dims.c/dims.r;
-          let sx=0,sy=0,sw=img.width,sh=img.height;
-          if(imgRatio>gridRatio){const nw=img.height*gridRatio;sx=(img.width-nw)/2;sw=nw;}
-          else{const nh=img.width/gridRatio;sy=(img.height-nh)/2;sh=nh;}
-          tctx.drawImage(img,sx,sy,sw,sh,0,0,dims.c,dims.r);
-          const data=tctx.getImageData(0,0,dims.c,dims.r).data;
-          const rgbToHex=(r,g,b)=>"#"+[r,g,b].map(v=>v.toString(16).padStart(2,"0")).join("");
-          const newPixels={};
+  const _pixImgHelper=(file,useFullColor)=>{
+    setPixImporting(true);
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      const img=new Image();
+      img.onload=()=>{
+        const dims=getPixelDims();
+        const tc=document.createElement("canvas");tc.width=dims.c;tc.height=dims.r;
+        const tctx=tc.getContext("2d");
+        tctx.imageSmoothingEnabled=true;tctx.imageSmoothingQuality="medium";
+        // Fit image covering the grid (crop to fill)
+        const imgRatio=img.width/img.height;const gridRatio=dims.c/dims.r;
+        let sx=0,sy=0,sw=img.width,sh=img.height;
+        if(imgRatio>gridRatio){const nw=img.height*gridRatio;sx=(img.width-nw)/2;sw=nw;}
+        else{const nh=img.width/gridRatio;sy=(img.height-nh)/2;sh=nh;}
+        tctx.drawImage(img,sx,sy,sw,sh,0,0,dims.c,dims.r);
+        const data=tctx.getImageData(0,0,dims.c,dims.r).data;
+        const rgbToHex=(r,g,b)=>"#"+[r,g,b].map(v=>v.toString(16).padStart(2,"0")).join("");
+        const newPixels={};
+        if(useFullColor){
+          // Full color mode — use actual pixel colors
           for(let row=0;row<dims.r;row++){for(let col=0;col<dims.c;col++){
             const idx=(row*dims.c+col)*4;
             const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];
             if(a<30)continue;
-            const lum=r*0.299+g*0.587+b*0.114;
-            if(lum<15)continue; // skip near-black
             newPixels[`${row}-${col}`]=rgbToHex(r,g,b);
           }}
-          const d=readNb();if(d.pages?.[pageIdxRef.current]){
-            d.pages[pageIdxRef.current].pixels=newPixels;writeNb(d);setNbData(d);
-          }
-          drawPixelGrid();setPixImporting(false);
-        };
-        img.src=ev.target.result;
+        }else{
+          // Palette mode — comprehensive 32-color cross-stitch palette
+          const palette=["#000000","#1a1a2e","#2d2d44","#555555","#888888","#bbbbbb","#ffffff",
+            "#f5576c","#cc3344","#881122","#fb923c","#cc7722","#884400",
+            "#feca57","#ccaa33","#887700","#43e97b","#22aa55","#116633",
+            "#60a5fa","#3366cc","#223388","#f093fb","#aa55cc","#663388",
+            "#22d3ee","#1199aa","#006666","#deb887","#a0724a","#6b4423","#f5deb3","#e8c9a0"];
+          const hexToRgb=(h)=>{const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);return[r,g,b];};
+          const paletteRgb=palette.map(hexToRgb);
+          const nearest=(r,g,b)=>{let best=0,bestD=Infinity;paletteRgb.forEach(([pr,pg,pb],i)=>{const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bestD){bestD=d;best=i;}});return palette[best];};
+          for(let row=0;row<dims.r;row++){for(let col=0;col<dims.c;col++){
+            const idx=(row*dims.c+col)*4;
+            const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];
+            if(a<30)continue;
+            newPixels[`${row}-${col}`]=nearest(r,g,b);
+          }}
+        }
+        const d=readNb();if(d.pages?.[pageIdxRef.current]){
+          d.pages[pageIdxRef.current].pixels=newPixels;writeNb(d);setNbData(d);
+        }
+        drawPixelGrid();setPixImporting(false);
       };
-      reader.readAsDataURL(file);
+      img.src=ev.target.result;
     };
+    reader.readAsDataURL(file);
+  };
+  const importImageToPixels=()=>{
+    const input=document.createElement("input");input.type="file";input.accept="image/*";
+    input.onchange=(e)=>{const file=e.target.files[0];if(file)_pixImgHelper(file,false);};
+    input.click();
+  };
+  const importImageFullColor=()=>{
+    const input=document.createElement("input");input.type="file";input.accept="image/*";
+    input.onchange=(e)=>{const file=e.target.files[0];if(file)_pixImgHelper(file,true);};
     input.click();
   };
   const setPixel=(row,col,color,erase)=>{const dims=getPixelDims();if(row<0||row>=dims.r||col<0||col>=dims.c)return;
