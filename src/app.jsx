@@ -6130,7 +6130,7 @@ const NotebookPanel=()=>{
     const preset=PIXEL_SIZES.find(s=>s.id===ps);if(preset)return preset;
     const m=ps.match(/^(\d+)x(\d+)$/);if(m)return{id:ps,label:`${m[1]}×${m[2]}`,desc:"Custom",c:Number(m[1]),r:Number(m[2])};
     return PIXEL_SIZES[1];};
-  const getPixelCellSize=()=>{const dims=getPixelDims();return Math.max(4,Math.min(20,Math.floor(400/Math.max(dims.c,dims.r))));};
+  const getPixelCellSize=()=>{const dims=getPixelDims();const m=Math.max(dims.c,dims.r);return m>200?Math.max(6,Math.floor(1200/m)):Math.max(10,Math.min(20,Math.floor(800/m)));};
   const getColorNum=(hex)=>{if(!hex)return"";const h=hex.toLowerCase();const p=PIXEL_PALETTE.find(p=>p.c===h);return p?String(p.n):(pixCustomLabels[h]||"");};
   const drawPixelGrid=()=>{const c=pixCanvasRef.current;if(!c)return;const ctx=c.getContext("2d");
     const dims=getPixelDims();const cs=getPixelCellSize();const pixels=getPixels();
