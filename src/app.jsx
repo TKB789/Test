@@ -5928,7 +5928,7 @@ const DAILY_WORDS=[
 const NotebookPanel=()=>{
   const NB_KEY="zodibuddy_notebook_v1";
   const readNb=()=>{try{return JSON.parse(localStorage.getItem(NB_KEY))||{pages:[],archive:[],pwHash:null};}catch{return{pages:[],archive:[],pwHash:null};}};
-  const writeNb=(d)=>{try{localStorage.setItem(NB_KEY,JSON.stringify(d));}catch{}};
+  const writeNb=(d)=>{localStorage.setItem(NB_KEY,JSON.stringify(d));};
 
   const[nbData,setNbData]=useState(readNb);
   const[nbUnlocked,setNbUnlocked]=useState(false);
@@ -6152,15 +6152,22 @@ const NotebookPanel=()=>{
         const near=(r,g,b)=>{let bi=0,bd=Infinity;palRgb.forEach(([pr,pg,pb],i)=>{const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bd){bd=d;bi=i;}});return pal[bi];};
         for(let row=0;row<dims.r;row++)for(let col=0;col<dims.c;col++){const idx=(row*dims.c+col)*4;const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];if(a<30)continue;newPixels[`${row}-${col}`]=near(r,g,b);}}
       const d=readNb();const pi=pageIdxRef.current;
-      if(d.pages?.[pi]){d.pages[pi].pixels=newPixels;saveNb(d);}
+      if(d.pages?.[pi]){d.pages[pi].pixels=newPixels;
+        try{writeNb(d);setNbData({...d});}catch(e){alert("Save failed: "+e.message);}
+      }else{alert("Page not found at index "+pi);}
       setTimeout(drawPixelGrid,50);setPixImporting(false);setPixImgCrop(null);
       }catch(err){alert("Error: "+err.message);setPixImporting(false);setPixImgCrop(null);}
     };img.src=imgSrc;
   };
   // Direct import — pick file, convert immediately (auto-crop to fill)
   const importDirect=(fullColor)=>{const input=document.createElement("input");input.type="file";input.accept="image/*";
-    input.onchange=(e)=>{const file=e.target.files[0];if(!file)return;
-      const reader=new FileReader();reader.onload=(ev)=>{_pixImgConvert(ev.target.result,fullColor,null);};reader.readAsDataURL(file);};input.click();};
+    input.onchange=(e)=>{const file=e.target.files[0];if(!file){alert("No file selected");return;}
+      const reader=new FileReader();
+      reader.onerror=()=>alert("FileReader error");
+      reader.onload=(ev)=>{
+        if(!ev.target.result){alert("Empty file data");return;}
+        _pixImgConvert(ev.target.result,fullColor,null);
+      };reader.readAsDataURL(file);};input.click();};
   // Crop import — pick file, show crop UI, then convert
   const importWithCrop=(fullColor)=>{const input=document.createElement("input");input.type="file";input.accept="image/*";
     input.onchange=(e)=>{const file=e.target.files[0];if(!file)return;pixImgModeRef.current=fullColor;
