@@ -6130,10 +6130,10 @@ const NotebookPanel=()=>{
   const[pixImporting,setPixImporting]=useState(false);
   const[pixImgCrop,setPixImgCrop]=useState(null);
   const[pixCropBox,setPixCropBox]=useState({x:0,y:0,w:100,h:100});
-  const pixImgFileRef=React.useRef(null);const pixImgModeRef=React.useRef(false);
-  const _pixImgHelper=(file,useFullColor,crop)=>{
-    setPixImporting(true);const reader=new FileReader();
-    reader.onload=(ev)=>{const img=new Image();img.onload=()=>{
+  const pixImgFileRef=React.useRef(null);const pixImgModeRef=React.useRef(false);const pixImgSrcRef=React.useRef(null);
+  const _pixImgConvert=(imgSrc,useFullColor,crop)=>{
+    setPixImporting(true);
+    const img=new Image();img.onload=()=>{
       const dims=getPixelDims();const tc=document.createElement("canvas");tc.width=dims.c;tc.height=dims.r;
       const tctx=tc.getContext("2d");tctx.imageSmoothingEnabled=true;tctx.imageSmoothingQuality="medium";
       let sx,sy,sw,sh;
@@ -6150,11 +6150,14 @@ const NotebookPanel=()=>{
         for(let row=0;row<dims.r;row++)for(let col=0;col<dims.c;col++){const idx=(row*dims.c+col)*4;const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];if(a<30)continue;newPixels[`${row}-${col}`]=near(r,g,b);}}
       const d=readNb();if(d.pages?.[pageIdxRef.current]){d.pages[pageIdxRef.current].pixels=newPixels;writeNb(d);setNbData(d);}
       drawPixelGrid();setPixImporting(false);setPixImgCrop(null);
-    };img.src=ev.target.result;};reader.readAsDataURL(file);};
+    };img.src=imgSrc;};
   const startImageImport=(fullColor)=>{const input=document.createElement("input");input.type="file";input.accept="image/*";
-    input.onchange=(e)=>{const file=e.target.files[0];if(!file)return;pixImgFileRef.current=file;pixImgModeRef.current=fullColor;
-      const reader=new FileReader();reader.onload=(ev)=>{const img=new Image();img.onload=()=>{setPixImgCrop({src:ev.target.result,imgW:img.width,imgH:img.height});setPixCropBox({x:0,y:0,w:100,h:100});};img.src=ev.target.result;};reader.readAsDataURL(file);};input.click();};
-  const confirmCrop=()=>{if(pixImgFileRef.current)_pixImgHelper(pixImgFileRef.current,pixImgModeRef.current,pixCropBox);};
+    input.onchange=(e)=>{const file=e.target.files[0];if(!file)return;pixImgModeRef.current=fullColor;
+      const reader=new FileReader();reader.onload=(ev)=>{
+        pixImgSrcRef.current=ev.target.result;
+        const img=new Image();img.onload=()=>{setPixImgCrop({src:ev.target.result,imgW:img.width,imgH:img.height});setPixCropBox({x:0,y:0,w:100,h:100});};img.src=ev.target.result;
+      };reader.readAsDataURL(file);};input.click();};
+  const confirmCrop=()=>{if(pixImgSrcRef.current)_pixImgConvert(pixImgSrcRef.current,pixImgModeRef.current,pixCropBox);};
 
   const setPixel=(row,col,color,erase)=>{const dims=getPixelDims();if(row<0||row>=dims.r||col<0||col>=dims.c)return;
     const key=`${row}-${col}`;const d=readNb();if(!d.pages?.[nbPageIdx])return;
@@ -6185,10 +6188,17 @@ const NotebookPanel=()=>{
   // Pinch zoom
   const pixPinchDist=React.useRef(null);
   const handlePixEvent=(e,isStart)=>{
-    // Two+ fingers = pinch zoom — cancel painting
+    // Two+ fingers = gesture — cancel painting, handle pinch zoom
     if(e.touches&&e.touches.length>1){
       pixIsPainting.current=false;pixCancelled.current=true;
-      // Let browser handle two-finger pan/scroll natively
+      const t1=e.touches[0],t2=e.touches[1];
+      const dist=Math.hypot(t1.clientX-t2.clientX,t1.clientY-t2.clientY);
+      if(pixPinchDist.current!==null){
+        const scale=dist/pixPinchDist.current;
+        if(Math.abs(scale-1)>0.01)setPageZoom(z=>Math.max(0.3,Math.min(8,z*scale)));
+      }
+      pixPinchDist.current=dist;
+      // Don't preventDefault — let browser also handle native pan
       return;
     }
     pixPinchDist.current=null;
