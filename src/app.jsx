@@ -6130,10 +6130,9 @@ const NotebookPanel=()=>{
   const[pixImporting,setPixImporting]=useState(false);
   const[pixImgCrop,setPixImgCrop]=useState(null);
   const[pixCropBox,setPixCropBox]=useState({x:0,y:0,w:100,h:100});
-  const pixImgFileRef=React.useRef(null);const pixImgModeRef=React.useRef(false);const pixImgSrcRef=React.useRef(null);
+  const pixImgModeRef=React.useRef(false);const pixImgSrcRef=React.useRef(null);
   const _pixImgConvert=(imgSrc,useFullColor,crop)=>{
     setPixImporting(true);
-    try{
     const img=new Image();
     img.onerror=()=>{alert("Failed to load image");setPixImporting(false);setPixImgCrop(null);};
     img.onload=()=>{
@@ -6155,18 +6154,21 @@ const NotebookPanel=()=>{
       const d=readNb();const pi=pageIdxRef.current;
       if(d.pages?.[pi]){d.pages[pi].pixels=newPixels;saveNb(d);}
       setTimeout(drawPixelGrid,50);setPixImporting(false);setPixImgCrop(null);
-      }catch(err){alert("Conversion error: "+err.message);setPixImporting(false);setPixImgCrop(null);}
+      }catch(err){alert("Error: "+err.message);setPixImporting(false);setPixImgCrop(null);}
     };img.src=imgSrc;
-    }catch(err){alert("Import error: "+err.message);setPixImporting(false);setPixImgCrop(null);}
   };
-  const startImageImport=(fullColor)=>{const input=document.createElement("input");input.type="file";input.accept="image/*";
+  // Direct import — pick file, convert immediately (auto-crop to fill)
+  const importDirect=(fullColor)=>{const input=document.createElement("input");input.type="file";input.accept="image/*";
+    input.onchange=(e)=>{const file=e.target.files[0];if(!file)return;
+      const reader=new FileReader();reader.onload=(ev)=>{_pixImgConvert(ev.target.result,fullColor,null);};reader.readAsDataURL(file);};input.click();};
+  // Crop import — pick file, show crop UI, then convert
+  const importWithCrop=(fullColor)=>{const input=document.createElement("input");input.type="file";input.accept="image/*";
     input.onchange=(e)=>{const file=e.target.files[0];if(!file)return;pixImgModeRef.current=fullColor;
       const reader=new FileReader();reader.onload=(ev)=>{
         pixImgSrcRef.current=ev.target.result;
-        const img=new Image();img.onload=()=>{setPixImgCrop({src:ev.target.result,imgW:img.width,imgH:img.height});setPixCropBox({x:0,y:0,w:100,h:100});};img.src=ev.target.result;
+        setPixImgCrop({src:ev.target.result});setPixCropBox({x:0,y:0,w:100,h:100});
       };reader.readAsDataURL(file);};input.click();};
   const confirmCrop=()=>{if(pixImgSrcRef.current)_pixImgConvert(pixImgSrcRef.current,pixImgModeRef.current,pixCropBox);};
-  const quickConvert=()=>{if(pixImgSrcRef.current)_pixImgConvert(pixImgSrcRef.current,pixImgModeRef.current,null);};
 
   const setPixel=(row,col,color,erase)=>{const dims=getPixelDims();if(row<0||row>=dims.r||col<0||col>=dims.c)return;
     const key=`${row}-${col}`;const d=readNb();if(!d.pages?.[nbPageIdx])return;
@@ -6374,10 +6376,12 @@ const NotebookPanel=()=>{
       <div style={{display:"flex",alignItems:"center",gap:3,padding:"0 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
         <button onClick={()=>{if(!confirm("Clear all?"))return;const d=readNb();if(d.pages?.[nbPageIdx]){d.pages[nbPageIdx].pixels={};writeNb(d);drawPixelGrid();}}}
           style={btn({background:"rgba(245,87,108,.1)",border:"1px solid rgba(245,87,108,.2)",color:"#f5576c",fontSize:10,padding:"3px 8px"})}>Clear</button>
-        <button onClick={()=>startImageImport(false)} disabled={pixImporting}
+        <button onClick={()=>importDirect(false)} disabled={pixImporting}
           style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:10,padding:"3px 7px"})}>{pixImporting?"...":"📷36"}</button>
-        <button onClick={()=>startImageImport(true)} disabled={pixImporting}
+        <button onClick={()=>importDirect(true)} disabled={pixImporting}
           style={btn({background:"rgba(240,147,251,.1)",border:"1px solid rgba(240,147,251,.2)",color:"#f093fb",fontSize:10,padding:"3px 7px"})}>{pixImporting?"...":"📷Full"}</button>
+        <button onClick={()=>importWithCrop(false)} disabled={pixImporting}
+          style={btn({background:"rgba(254,202,87,.1)",border:"1px solid rgba(254,202,87,.2)",color:"#feca57",fontSize:10,padding:"3px 7px"})}>✂️</button>
         <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
         <button onClick={()=>{setShowPixNumbers(v=>{const nv=!v;setTimeout(drawPixelGrid,10);return nv;});}} style={btn(showPixNumbers?{background:"rgba(254,202,87,.12)",border:"1px solid rgba(254,202,87,.4)",color:"#feca57",fontSize:10,padding:"3px 7px"}:{fontSize:10,padding:"3px 7px",color:"#888"})}>#</button>
         <span style={{fontSize:10,opacity:.3,fontWeight:700}}>Grid:</span>
@@ -6397,10 +6401,9 @@ const NotebookPanel=()=>{
             <input type="number" min="0" max="100" value={pixCropBox[f.k]} onChange={e=>setPixCropBox(p=>({...p,[f.k]:Math.max(0,Math.min(100,Number(e.target.value)||0))}))}
               style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid rgba(254,202,87,.3)",background:"rgba(254,202,87,.08)",color:"#feca57",fontSize:14,textAlign:"center",outline:"none"}}/></div>))}
         </div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center"}}>
-          <button onClick={quickConvert} style={{padding:"10px 18px",borderRadius:10,background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b",fontSize:14,fontWeight:700,cursor:"pointer"}}>Full Image</button>
-          <button onClick={confirmCrop} style={{padding:"10px 18px",borderRadius:10,background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",fontSize:14,fontWeight:700,cursor:"pointer"}}>Crop & Convert</button>
-          <button onClick={()=>{setPixImgCrop(null);setPixImporting(false);}} style={{padding:"10px 18px",borderRadius:10,background:"rgba(255,255,255,.06)",color:"#aaa",border:"1px solid rgba(255,255,255,.1)",fontSize:14,fontWeight:700,cursor:"pointer"}}>Cancel</button>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={confirmCrop} style={{padding:"10px 20px",borderRadius:10,background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",fontSize:14,fontWeight:700,cursor:"pointer"}}>Convert</button>
+          <button onClick={()=>{setPixImgCrop(null);setPixImporting(false);}} style={{padding:"10px 20px",borderRadius:10,background:"rgba(255,255,255,.06)",color:"#aaa",border:"1px solid rgba(255,255,255,.1)",fontSize:14,fontWeight:700,cursor:"pointer"}}>Cancel</button>
         </div>
       </div>}
       <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch"}}>
