@@ -6149,14 +6149,47 @@ const NotebookPanel=()=>{
       for(let x=0;x<=dims.c;x+=pixelGridLines)ctx.fillRect(x*cs,0,1,dims.r*cs);
       for(let y=0;y<=dims.r;y+=pixelGridLines)ctx.fillRect(0,y*cs,dims.c*cs,1);
       ctx.globalAlpha=1;}
-    // Number overlay
-    if(showPixNumbers&&cs>=8){ctx.textAlign="center";ctx.textBaseline="middle";
-      const fs=Math.max(5,Math.min(cs-3,11));ctx.font=`bold ${fs}px sans-serif`;
+    // Number overlay — always show when enabled (font scales with cell size)
+    if(showPixNumbers){ctx.textAlign="center";ctx.textBaseline="middle";
+      const fs=Math.max(3,Math.min(cs-1,11));ctx.font=`bold ${fs}px sans-serif`;
       Object.entries(pixels).forEach(([key,color])=>{const[r,cl]=key.split("-").map(Number);
         if(r<dims.r&&cl<dims.c){const num=getColorNum(color);if(num){
           const hr=parseInt(color.slice(1,3),16)||0,hg=parseInt(color.slice(3,5),16)||0,hb=parseInt(color.slice(5,7),16)||0;
           ctx.fillStyle=(hr*.299+hg*.587+hb*.114)>128?"rgba(0,0,0,.85)":"rgba(255,255,255,.85)";
           ctx.fillText(num,cl*cs+cs/2,r*cs+cs/2);}}});}
+  };
+  // ─── PRINT PIXEL ART (paint by number) ──────────────────────
+  const printPixelArt=()=>{
+    const dims=getPixelDims();const pixels=getPixels();
+    const scale=Math.max(16,Math.min(40,Math.floor(2400/Math.max(dims.c,dims.r)))); // scale up for print
+    const w=dims.c*scale,h=dims.r*scale;
+    const tc=document.createElement("canvas");tc.width=w;tc.height=h;
+    const ctx=tc.getContext("2d");
+    // White background
+    ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);
+    // Draw colored pixels
+    Object.entries(pixels).forEach(([key,color])=>{const[r,cl]=key.split("-").map(Number);
+      if(r<dims.r&&cl<dims.c){ctx.fillStyle=color;ctx.fillRect(cl*scale,r*scale,scale,scale);}});
+    // Grid lines
+    ctx.strokeStyle="#ccc";ctx.lineWidth=0.5;
+    for(let x=0;x<=dims.c;x++){ctx.beginPath();ctx.moveTo(x*scale,0);ctx.lineTo(x*scale,h);ctx.stroke();}
+    for(let y=0;y<=dims.r;y++){ctx.beginPath();ctx.moveTo(0,y*scale);ctx.lineTo(w,y*scale);ctx.stroke();}
+    // Section borders
+    if(pixelGridLines>0){ctx.strokeStyle="#000";ctx.lineWidth=1.5;
+      for(let x=0;x<=dims.c;x+=pixelGridLines){ctx.beginPath();ctx.moveTo(x*scale,0);ctx.lineTo(x*scale,h);ctx.stroke();}
+      for(let y=0;y<=dims.r;y+=pixelGridLines){ctx.beginPath();ctx.moveTo(0,y*scale);ctx.lineTo(w,y*scale);ctx.stroke();}}
+    // Numbers
+    ctx.textAlign="center";ctx.textBaseline="middle";
+    const fs=Math.max(6,Math.min(scale*0.6,14));ctx.font=`bold ${fs}px sans-serif`;
+    Object.entries(pixels).forEach(([key,color])=>{const[r,cl]=key.split("-").map(Number);
+      if(r<dims.r&&cl<dims.c){const num=getColorNum(color);if(num){
+        const hr=parseInt(color.slice(1,3),16)||0,hg=parseInt(color.slice(3,5),16)||0,hb=parseInt(color.slice(5,7),16)||0;
+        ctx.fillStyle=(hr*.299+hg*.587+hb*.114)>128?"#000":"#fff";
+        ctx.fillText(num,cl*scale+scale/2,r*scale+scale/2);}}});
+    // Open in new window for printing
+    const dataUrl=tc.toDataURL("image/png");
+    const win=window.open("","_blank");
+    if(win){win.document.write(`<html><head><title>Pixel Art - Paint by Number</title><style>@media print{body{margin:0}img{width:100%;height:auto;}}</style></head><body style="margin:0;background:#fff;display:flex;flex-direction:column;align-items:center;padding:8px"><h3 style="margin:4px 0;font-family:sans-serif">${nbData.pages[nbPageIdx]?.title||"Pixel Art"} — Paint by Number</h3><img src="${dataUrl}" style="max-width:100%;height:auto"/><div style="margin:8px 0;font-family:sans-serif;font-size:11px;display:flex;flex-wrap:wrap;gap:8px">${PIXEL_PALETTE.map(p=>`<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:14px;height:14px;border-radius:3px;background:${p.c};border:1px solid #ccc;display:inline-block"></span><b>${p.n}</b> ${p.nm}</span>`).join("")}</div><button onclick="window.print()" style="padding:10px 30px;font-size:16px;margin:8px;cursor:pointer">🖨️ Print</button></body></html>`);win.document.close();}
   };
   // ─── IMAGE TO PIXEL ART ────────────────────────────────────────
   const[pixImporting,setPixImporting]=useState(false);
@@ -6431,6 +6464,7 @@ const NotebookPanel=()=>{
           style={btn({background:"rgba(254,202,87,.1)",border:"1px solid rgba(254,202,87,.2)",color:"#feca57",fontSize:10,padding:"3px 7px"})}>✂️</button>
         <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
         <button onClick={()=>{setShowPixNumbers(v=>{const nv=!v;setTimeout(drawPixelGrid,10);return nv;});}} style={btn(showPixNumbers?{background:"rgba(254,202,87,.12)",border:"1px solid rgba(254,202,87,.4)",color:"#feca57",fontSize:10,padding:"3px 7px"}:{fontSize:10,padding:"3px 7px",color:"#888"})}>#</button>
+        <button onClick={printPixelArt} style={btn({fontSize:10,padding:"3px 7px",color:"#888"})}>🖨️</button>
         <span style={{fontSize:10,opacity:.3,fontWeight:700}}>Grid:</span>
         {[{v:0,l:"Off"},{v:5,l:"5×5"},{v:10,l:"10×10"},{v:20,l:"20×20"}].map(g=>(
           <button key={g.v} onClick={()=>setPixelGridLines(g.v)} style={{padding:"2px 6px",borderRadius:6,fontSize:10,fontWeight:700,border:pixelGridLines===g.v?"1px solid rgba(254,202,87,.5)":"1px solid rgba(255,255,255,.06)",background:pixelGridLines===g.v?"rgba(254,202,87,.12)":"transparent",color:pixelGridLines===g.v?"#feca57":"#666",cursor:"pointer"}}>{g.l}</button>))}
@@ -9277,9 +9311,9 @@ function SpiritAnimals(){
       {/* Header */}
       <div style={{padding:"8px 16px 0"}}>
         {/* ── Buddy Card (styled like stats card) ── */}
-        <div style={{borderRadius:16,padding:2,background:`linear-gradient(135deg,${animalData.color},${animalData.accent},#feca57,${animalData.color})`,backgroundSize:"300% 300%",animation:"holoShift 4s ease infinite",boxShadow:streak>=30?"0 0 30px rgba(103,232,249,.6)":streak>=21?"0 0 25px rgba(251,191,36,.5)":streak>=14?"0 0 20px rgba(192,132,252,.4)":streak>=7?"0 0 15px rgba(96,165,250,.3)":"0 8px 32px rgba(0,0,0,.5)"}}>
+        <div style={{borderRadius:16,padding:2,background:allDoneToday?`linear-gradient(135deg,${animalData.color},${animalData.accent},#feca57,${animalData.color})`:"rgba(255,255,255,.08)",backgroundSize:"300% 300%",animation:allDoneToday?"holoShift 4s ease infinite":"none",boxShadow:allDoneToday?(streak>=30?"0 0 30px rgba(103,232,249,.6)":streak>=21?"0 0 25px rgba(251,191,36,.5)":streak>=14?"0 0 20px rgba(192,132,252,.4)":streak>=7?"0 0 15px rgba(96,165,250,.3)":"0 8px 32px rgba(0,0,0,.5)"):"0 8px 32px rgba(0,0,0,.5)"}}>
           <div style={{borderRadius:14,background:"linear-gradient(160deg,#0d0d2b 0%,#1a1040 30%,#0f1a3a 60%,#0d0d2b 100%)",padding:"12px 14px",position:"relative",overflow:"hidden"}}>
-            <div style={{position:"absolute",inset:0,borderRadius:14,background:"linear-gradient(105deg,transparent 30%,rgba(255,255,255,.03) 45%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.03) 55%,transparent 70%)",backgroundSize:"200% 200%",animation:"holoShimmer 3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
+            {allDoneToday&&<div style={{position:"absolute",inset:0,borderRadius:14,background:"linear-gradient(105deg,transparent 30%,rgba(255,255,255,.03) 45%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.03) 55%,transparent 70%)",backgroundSize:"200% 200%",animation:"holoShimmer 3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>}
             <div style={{position:"relative",zIndex:2}}>
               {/* Name + Level row */}
               <div onClick={()=>{clearTimeout(devTimer.t);setDevTaps(p=>{const n=p+1;if(n>=5){setDevStreak(prev=>prev!==null?null:0);return 0;}devTimer.t=setTimeout(()=>setDevTaps(0),1500);return n;});}} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",cursor:"default"}}>
