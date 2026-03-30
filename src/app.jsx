@@ -6159,22 +6159,29 @@ const NotebookPanel=()=>{
       }catch(err){alert("Error: "+err.message);setPixImporting(false);setPixImgCrop(null);}
     };img.src=imgSrc;
   };
-  // Direct import — pick file, convert immediately (auto-crop to fill)
-  const importDirect=(fullColor)=>{const input=document.createElement("input");input.type="file";input.accept="image/*";
-    input.onchange=(e)=>{const file=e.target.files[0];if(!file){alert("No file selected");return;}
+  // Direct import — use persistent input ref to avoid GC on mobile
+  const pixFileInputRef=React.useRef(null);
+  const pixImportCallbackRef=React.useRef(null);
+  const importDirect=(fullColor)=>{
+    pixImportCallbackRef.current=(file)=>{
       const reader=new FileReader();
       reader.onerror=()=>alert("FileReader error");
-      reader.onload=(ev)=>{
-        if(!ev.target.result){alert("Empty file data");return;}
-        _pixImgConvert(ev.target.result,fullColor,null);
-      };reader.readAsDataURL(file);};input.click();};
+      reader.onload=(ev)=>{if(ev.target.result)_pixImgConvert(ev.target.result,fullColor,null);};
+      reader.readAsDataURL(file);
+    };
+    if(pixFileInputRef.current)pixFileInputRef.current.click();
+  };
   // Crop import — pick file, show crop UI, then convert
-  const importWithCrop=(fullColor)=>{const input=document.createElement("input");input.type="file";input.accept="image/*";
-    input.onchange=(e)=>{const file=e.target.files[0];if(!file)return;pixImgModeRef.current=fullColor;
+  const importWithCrop=(fullColor)=>{
+    pixImportCallbackRef.current=(file)=>{
+      pixImgModeRef.current=fullColor;
       const reader=new FileReader();reader.onload=(ev)=>{
         pixImgSrcRef.current=ev.target.result;
         setPixImgCrop({src:ev.target.result});setPixCropBox({x:0,y:0,w:100,h:100});
-      };reader.readAsDataURL(file);};input.click();};
+      };reader.readAsDataURL(file);
+    };
+    if(pixFileInputRef.current)pixFileInputRef.current.click();
+  };
   const confirmCrop=()=>{if(pixImgSrcRef.current)_pixImgConvert(pixImgSrcRef.current,pixImgModeRef.current,pixCropBox);};
 
   const setPixel=(row,col,color,erase)=>{const dims=getPixelDims();if(row<0||row>=dims.r||col<0||col>=dims.c)return;
@@ -6342,6 +6349,7 @@ const NotebookPanel=()=>{
     const page=nbData.pages[nbPageIdx];const dims=getPixelDims();const cs=getPixelCellSize();
     const cW=dims.c*cs,cH=dims.r*cs,hasPrev=nbPageIdx>0,hasNext=nbPageIdx<nbData.pages.length-1;
     return(<div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <input ref={pixFileInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={(e)=>{const file=e.target.files?.[0];if(file&&pixImportCallbackRef.current)pixImportCallbackRef.current(file);e.target.value="";}}/>
       <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px 4px",flexShrink:0}}>
         <button onClick={goToc} style={btn()}>←</button>
         <button onClick={undoPixel} style={btn({color:"#aaa"})}>↩</button>
