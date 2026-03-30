@@ -6470,23 +6470,48 @@ const NotebookPanel=()=>{
           <button key={g.v} onClick={()=>setPixelGridLines(g.v)} style={{padding:"2px 6px",borderRadius:6,fontSize:10,fontWeight:700,border:pixelGridLines===g.v?"1px solid rgba(254,202,87,.5)":"1px solid rgba(255,255,255,.06)",background:pixelGridLines===g.v?"rgba(254,202,87,.12)":"transparent",color:pixelGridLines===g.v?"#feca57":"#666",cursor:"pointer"}}>{g.l}</button>))}
       </div>
       {/* Image crop UI */}
-      {pixImgCrop&&<div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,.95)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:16}}>
-        <div style={{fontSize:16,fontWeight:800,color:"#e8e0f0",marginBottom:10}}>Select Area to Convert</div>
-        <div style={{position:"relative",maxWidth:280,maxHeight:280,marginBottom:12}}>
-          <img src={pixImgCrop.src} style={{maxWidth:280,maxHeight:280,objectFit:"contain",borderRadius:8,opacity:.5,display:"block"}}/>
-          <div style={{position:"absolute",left:`${pixCropBox.x}%`,top:`${pixCropBox.y}%`,width:`${pixCropBox.w}%`,height:`${pixCropBox.h}%`,border:"2px solid #feca57",borderRadius:4,background:"rgba(254,202,87,.12)"}}/>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:10,width:200}}>
-          {[{k:"x",l:"X %"},{k:"y",l:"Y %"},{k:"w",l:"W %"},{k:"h",l:"H %"}].map(f=>(
-            <div key={f.k}><div style={{fontSize:10,opacity:.4}}>{f.l}</div>
-            <input type="number" min="0" max="100" value={pixCropBox[f.k]} onChange={e=>setPixCropBox(p=>({...p,[f.k]:Math.max(0,Math.min(100,Number(e.target.value)||0))}))}
-              style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid rgba(254,202,87,.3)",background:"rgba(254,202,87,.08)",color:"#feca57",fontSize:14,textAlign:"center",outline:"none"}}/></div>))}
-        </div>
-        <div style={{display:"flex",gap:8}}>
-          <button onClick={confirmCrop} style={{padding:"10px 20px",borderRadius:10,background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",fontSize:14,fontWeight:700,cursor:"pointer"}}>Convert</button>
-          <button onClick={()=>{setPixImgCrop(null);setPixImporting(false);}} style={{padding:"10px 20px",borderRadius:10,background:"rgba(255,255,255,.06)",color:"#aaa",border:"1px solid rgba(255,255,255,.1)",fontSize:14,fontWeight:700,cursor:"pointer"}}>Cancel</button>
-        </div>
-      </div>}
+      {pixImgCrop&&(()=>{
+        const dims=getPixelDims();const gridRatio=dims.c/dims.r;
+        const imgRef=React.createRef();
+        const onDrag=(e)=>{
+          const touch=e.touches?e.touches[0]:e;
+          const img=e.currentTarget.querySelector("img")||e.currentTarget;
+          const rect=e.currentTarget.getBoundingClientRect();
+          const px=((touch.clientX-rect.left)/rect.width)*100;
+          const py=((touch.clientY-rect.top)/rect.height)*100;
+          // Size crop to maintain grid aspect ratio, 60% of image width
+          const cw=pixCropBox.w;const ch=Math.min(100,cw*(rect.width/rect.height)/gridRatio);
+          const cx=Math.max(0,Math.min(100-cw,px-cw/2));
+          const cy=Math.max(0,Math.min(100-ch,py-ch/2));
+          setPixCropBox({x:cx,y:cy,w:cw,h:ch});
+        };
+        return <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,.95)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{fontSize:16,fontWeight:800,color:"#e8e0f0",marginBottom:6}}>Drag to select area</div>
+          <div style={{fontSize:11,color:"#888",marginBottom:8}}>Pinch or use slider to resize</div>
+          <div style={{position:"relative",width:300,maxHeight:400,marginBottom:10,touchAction:"none"}}
+            onTouchMove={onDrag} onMouseMove={(e)=>{if(e.buttons===1)onDrag(e);}}>
+            <img src={pixImgCrop.src} style={{width:"100%",height:"auto",borderRadius:8,opacity:.4,display:"block",userSelect:"none",pointerEvents:"none"}}/>
+            <div style={{position:"absolute",left:`${pixCropBox.x}%`,top:`${pixCropBox.y}%`,width:`${pixCropBox.w}%`,height:`${pixCropBox.h}%`,border:"2px solid #feca57",borderRadius:4,background:"rgba(254,202,87,.1)",pointerEvents:"none"}}/>
+            {/* Dark overlay outside crop */}
+            <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:`${pixCropBox.y}%`,background:"rgba(0,0,0,.5)"}}/>
+              <div style={{position:"absolute",bottom:0,left:0,right:0,height:`${100-pixCropBox.y-pixCropBox.h}%`,background:"rgba(0,0,0,.5)"}}/>
+              <div style={{position:"absolute",top:`${pixCropBox.y}%`,left:0,width:`${pixCropBox.x}%`,height:`${pixCropBox.h}%`,background:"rgba(0,0,0,.5)"}}/>
+              <div style={{position:"absolute",top:`${pixCropBox.y}%`,right:0,width:`${100-pixCropBox.x-pixCropBox.w}%`,height:`${pixCropBox.h}%`,background:"rgba(0,0,0,.5)"}}/>
+            </div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,width:260}}>
+            <span style={{fontSize:11,color:"#888",flexShrink:0}}>Size</span>
+            <input type="range" min="20" max="100" value={pixCropBox.w} onChange={(e)=>{const nw=Number(e.target.value);setPixCropBox(p=>{const nh=Math.min(100,nw*1/gridRatio);return{...p,w:nw,h:nh,x:Math.min(p.x,100-nw),y:Math.min(p.y,100-nh)};});}}
+              style={{flex:1,accentColor:"#feca57"}}/>
+            <span style={{fontSize:11,color:"#feca57",minWidth:30}}>{Math.round(pixCropBox.w)}%</span>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={confirmCrop} style={{padding:"10px 24px",borderRadius:10,background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",fontSize:15,fontWeight:700,cursor:"pointer"}}>Convert</button>
+            <button onClick={()=>{setPixImgCrop(null);setPixImporting(false);}} style={{padding:"10px 24px",borderRadius:10,background:"rgba(255,255,255,.06)",color:"#aaa",border:"1px solid rgba(255,255,255,.1)",fontSize:15,fontWeight:700,cursor:"pointer"}}>Cancel</button>
+          </div>
+        </div>;
+      })()}
       <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch"}}>
         <div style={{transform:`scale(${pageZoom})`,transformOrigin:"top left",width:cW/pageZoom,height:cH/pageZoom,minWidth:cW,minHeight:cH}}>
           <canvas ref={pixCanvasCallbackRef} width={cW} height={cH} style={{width:cW,height:cH,touchAction:"pan-x pan-y",cursor:"crosshair",display:"block",imageRendering:"pixelated"}}/>
