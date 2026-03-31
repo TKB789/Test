@@ -6401,7 +6401,9 @@ const NotebookPanel=()=>{
     pixelUndoRef.current.push({key,old,newVal});pixelRedoRef.current=[];
     d.pages[nbPageIdx].pixels=pixels;writeNb(d);
     const c=pixCanvasRef.current;if(c){const ctx=c.getContext("2d");const cs=getPixelCellSize();
-      ctx.fillStyle=pixels[key]||"#111";ctx.fillRect(col*cs,row*cs,cs,cs);}};
+      if(pixels[key]){ctx.fillStyle=pixels[key];ctx.fillRect(col*cs,row*cs,cs,cs);}
+      else{ctx.fillStyle="#f0f0f0";ctx.fillRect(col*cs,row*cs,cs,cs);
+        ctx.strokeStyle="rgba(0,0,0,.08)";ctx.lineWidth=0.5;ctx.strokeRect(col*cs,row*cs,cs,cs);}}};
   const undoPixel=()=>{if(!pixelUndoRef.current.length)return;const entry=pixelUndoRef.current.pop();
     const{key,old}=entry;
     const d=readNb();if(!d.pages?.[nbPageIdx])return;const pixels=d.pages[nbPageIdx].pixels||{};
