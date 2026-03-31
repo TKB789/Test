@@ -6280,11 +6280,16 @@ const NotebookPanel=()=>{
       for(let x=0;x<=dims.c;x+=pixelGridLines)ctx.fillRect(x*cs,0,1,dims.r*cs);
       for(let y=0;y<=dims.r;y+=pixelGridLines)ctx.fillRect(0,y*cs,dims.c*cs,1);
       ctx.globalAlpha=1;}
-    // Number overlay — always show when enabled (font scales with cell size)
+    // Number overlay — rank by usage count (1=most pixels, 2=second, etc.)
     if(showPixNumbers){ctx.textAlign="center";ctx.textBaseline="middle";
       const fs=Math.max(3,Math.min(cs-1,11));ctx.font=`bold ${fs}px sans-serif`;
+      // Build color rank map: count pixels per color, sort by count descending
+      const colorCounts={};
+      Object.values(pixels).forEach(color=>{colorCounts[color]=(colorCounts[color]||0)+1;});
+      const ranked=Object.entries(colorCounts).sort((a,b)=>b[1]-a[1]);
+      const rankMap={};ranked.forEach(([color],i)=>{rankMap[color]=String(i+1);});
       Object.entries(pixels).forEach(([key,color])=>{const[r,cl]=key.split("-").map(Number);
-        if(r<dims.r&&cl<dims.c){const num=getColorNum(color);if(num){
+        if(r<dims.r&&cl<dims.c){const num=rankMap[color];if(num){
           const hr=parseInt(color.slice(1,3),16)||0,hg=parseInt(color.slice(3,5),16)||0,hb=parseInt(color.slice(5,7),16)||0;
           ctx.fillStyle=(hr*.299+hg*.587+hb*.114)>128?"rgba(0,0,0,.85)":"rgba(255,255,255,.85)";
           ctx.fillText(num,cl*cs+cs/2,r*cs+cs/2);}}});}
@@ -6309,18 +6314,23 @@ const NotebookPanel=()=>{
     if(pixelGridLines>0){ctx.strokeStyle="#000";ctx.lineWidth=1.5;
       for(let x=0;x<=dims.c;x+=pixelGridLines){ctx.beginPath();ctx.moveTo(x*scale,0);ctx.lineTo(x*scale,h);ctx.stroke();}
       for(let y=0;y<=dims.r;y+=pixelGridLines){ctx.beginPath();ctx.moveTo(0,y*scale);ctx.lineTo(w,y*scale);ctx.stroke();}}
-    // Numbers
+    // Numbers — ranked by usage count
+    const colorCounts={};
+    Object.values(pixels).forEach(color=>{colorCounts[color]=(colorCounts[color]||0)+1;});
+    const ranked=Object.entries(colorCounts).sort((a,b)=>b[1]-a[1]);
+    const rankMap={};ranked.forEach(([color],i)=>{rankMap[color]=String(i+1);});
     ctx.textAlign="center";ctx.textBaseline="middle";
     const fs=Math.max(6,Math.min(scale*0.6,14));ctx.font=`bold ${fs}px sans-serif`;
     Object.entries(pixels).forEach(([key,color])=>{const[r,cl]=key.split("-").map(Number);
-      if(r<dims.r&&cl<dims.c){const num=getColorNum(color);if(num){
+      if(r<dims.r&&cl<dims.c){const num=rankMap[color];if(num){
         const hr=parseInt(color.slice(1,3),16)||0,hg=parseInt(color.slice(3,5),16)||0,hb=parseInt(color.slice(5,7),16)||0;
         ctx.fillStyle=(hr*.299+hg*.587+hb*.114)>128?"#000":"#fff";
         ctx.fillText(num,cl*scale+scale/2,r*scale+scale/2);}}});
     // Open in new window for printing
     const dataUrl=tc.toDataURL("image/png");
     const win=window.open("","_blank");
-    if(win){const usedColors=new Set(Object.values(pixels));const usedPalette=PIXEL_PALETTE.filter(p=>usedColors.has(p.c));win.document.write(`<html><head><title>Pixel Art - Paint by Number</title><style>@media print{body{margin:0}img{width:100%;height:auto;}}</style></head><body style="margin:0;background:#fff;display:flex;flex-direction:column;align-items:center;padding:8px"><h3 style="margin:4px 0;font-family:sans-serif">${nbData.pages[nbPageIdx]?.title||"Pixel Art"} — Paint by Number</h3><img src="${dataUrl}" style="max-width:100%;height:auto"/><div style="margin:8px 0;font-family:sans-serif;font-size:11px;display:flex;flex-wrap:wrap;gap:8px">${usedPalette.map(p=>`<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:14px;height:14px;border-radius:3px;background:${p.c};border:1px solid #ccc;display:inline-block"></span><b>DMC ${p.n}</b> ${p.nm}</span>`).join("")}</div><button onclick="window.print()" style="padding:10px 30px;font-size:16px;margin:8px;cursor:pointer">🖨️ Print</button></body></html>`);win.document.close();}
+    if(win){const legendHtml=ranked.map(([color,count],i)=>{const p=PIXEL_PALETTE.find(p=>p.c===color);const label=p?`DMC ${p.n} — ${p.nm}`:`Custom`;return`<span style="display:inline-flex;align-items:center;gap:4px;margin:2px 0"><span style="width:16px;height:16px;border-radius:3px;background:${color};border:1px solid #ccc;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:${parseInt(color.slice(1,3),16)*.299+parseInt(color.slice(3,5),16)*.587+parseInt(color.slice(5,7),16)*.114>128?'#000':'#fff'}">${i+1}</span><b>#${i+1}</b> ${label} <span style="color:#888">(${count} px)</span></span>`;}).join("");
+      win.document.write(`<html><head><title>Pixel Art - Paint by Number</title><style>@media print{body{margin:0}img{width:100%;height:auto;}}</style></head><body style="margin:0;background:#fff;display:flex;flex-direction:column;align-items:center;padding:8px"><h3 style="margin:4px 0;font-family:sans-serif">${nbData.pages[nbPageIdx]?.title||"Pixel Art"} — Paint by Number</h3><img src="${dataUrl}" style="max-width:100%;height:auto"/><div style="margin:8px 0;font-family:sans-serif;font-size:12px;display:flex;flex-wrap:wrap;gap:10px">${legendHtml}</div><button onclick="window.print()" style="padding:10px 30px;font-size:16px;margin:8px;cursor:pointer">🖨️ Print</button></body></html>`);win.document.close();}
   };
   // ─── IMAGE TO PIXEL ART ────────────────────────────────────────
   const[pixImporting,setPixImporting]=useState(false);
@@ -6448,8 +6458,11 @@ const NotebookPanel=()=>{
   // Use refs so event listeners always call the latest handler version
   const pixHandlerRef=React.useRef(null);
   const pixEndRef=React.useRef(null);
+  const pixPendingStart=React.useRef(null); // delay first paint to avoid pinch-zoom accidents
   pixHandlerRef.current=(e,isStart)=>{
     if(e.touches&&e.touches.length>1){
+      // Second finger arrived — cancel any pending paint and switch to pinch mode
+      if(pixPendingStart.current){clearTimeout(pixPendingStart.current);pixPendingStart.current=null;}
       pixIsPainting.current=false;pixCancelled.current=true;
       const t1=e.touches[0],t2=e.touches[1];
       const dist=Math.hypot(t1.clientX-t2.clientX,t1.clientY-t2.clientY);
@@ -6464,15 +6477,32 @@ const NotebookPanel=()=>{
     if(isStart){
       pixIsPainting.current=true;pixCancelled.current=false;pixMoved.current=false;
       pixLastCell.current=null;
-      pixPaintedCells.current=new Set(); // reset for new stroke
+      pixPaintedCells.current=new Set();
       const cell=cellFromTouchFn(t);
       if(cell){pixLastCell.current=cell;pixStartPos.current=cell;}
       e.preventDefault();
-      if(cell)paintCellFn(cell.row,cell.col);
+      if(!e.touches){
+        // Mouse: paint immediately (no pinch concern)
+        if(cell)paintCellFn(cell.row,cell.col);
+      } else {
+        // Touch: delay paint 80ms to see if second finger arrives (pinch zoom)
+        pixPendingStart.current=setTimeout(()=>{
+          pixPendingStart.current=null;
+          if(pixIsPainting.current&&!pixCancelled.current&&cell){
+            paintCellFn(cell.row,cell.col);
+          }
+        },80);
+      }
       return;
     }
     if(!pixIsPainting.current||pixCancelled.current)return;
-    e.preventDefault();pixMoved.current=true;
+    e.preventDefault();
+    // First move: flush pending start paint if still waiting
+    if(pixPendingStart.current){clearTimeout(pixPendingStart.current);pixPendingStart.current=null;
+      const startCell=pixStartPos.current;
+      if(startCell)paintCellFn(startCell.row,startCell.col);
+    }
+    pixMoved.current=true;
     const cell=cellFromTouchFn(t);if(!cell)return;
     const last=pixLastCell.current;
     if(last&&(last.row!==cell.row||last.col!==cell.col)){
@@ -6481,7 +6511,13 @@ const NotebookPanel=()=>{
     pixLastCell.current=cell;
   };
   pixEndRef.current=(e)=>{
-    // On touch end, only paint if we moved to a NEW cell not yet painted
+    // Flush pending start if tap ended before the delay
+    if(pixPendingStart.current){clearTimeout(pixPendingStart.current);pixPendingStart.current=null;
+      if(pixIsPainting.current&&!pixCancelled.current){
+        const startCell=pixStartPos.current;
+        if(startCell)paintCellFn(startCell.row,startCell.col);
+      }
+    }
     if(pixIsPainting.current&&!pixCancelled.current){
       if(e.changedTouches){
         const t=e.changedTouches[0];
@@ -6491,7 +6527,6 @@ const NotebookPanel=()=>{
           if(last&&(last.row!==cell.row||last.col!==cell.col)){
             paintLineFn(last.row,last.col,cell.row,cell.col);
           }
-          // For single tap: touchstart already painted it, no need to re-fire
         }
       }
     }
@@ -6671,16 +6706,22 @@ const NotebookPanel=()=>{
         <button onClick={archiveCurrentPage} style={btn({color:"#888",fontSize:10,padding:"3px 8px"})}>🗃 Archive</button>
         <button onClick={deleteCurrentPage} style={btn({color:"#888",fontSize:10,padding:"3px 8px"})}>🗑 Delete</button>
       </div>
-      {/* Thread list for pixel art — shows used DMC colors with thread info for purchasing */}
-      {showPixPicker&&(()=>{const pixels=getPixels();const usedHexes=[...new Set(Object.values(pixels))];const usedDmc=usedHexes.map(h=>PIXEL_PALETTE.find(p=>p.c===h)).filter(Boolean).sort((a,b)=>String(a.n).localeCompare(String(b.n),undefined,{numeric:true}));
-        return usedDmc.length>0?<div style={{padding:"2px 10px 6px",flexShrink:0}}>
-          <div style={{fontSize:10,fontWeight:700,color:"rgba(232,224,240,.4)",marginBottom:3}}>🧵 Thread List ({usedDmc.length} colors used)</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:3,maxHeight:100,overflowY:"auto"}}>
-            {usedDmc.map(p=><div key={p.n} style={{display:"flex",alignItems:"center",gap:4,background:"rgba(255,255,255,.04)",borderRadius:5,padding:"2px 6px"}}>
-              <div style={{width:10,height:10,borderRadius:2,background:p.c,border:"1px solid rgba(255,255,255,.15)",flexShrink:0}}/>
-              <span style={{fontSize:9,color:"#e8e0f0",fontWeight:700}}>DMC {p.n}</span>
-              <span style={{fontSize:9,color:"rgba(232,224,240,.4)"}}>{p.nm}</span>
-            </div>)}
+      {/* Thread list for pixel art — ranked by usage with pixel counts for thread purchasing */}
+      {showPixPicker&&(()=>{const pixels=getPixels();
+        const colorCounts={};Object.values(pixels).forEach(color=>{colorCounts[color]=(colorCounts[color]||0)+1;});
+        const ranked=Object.entries(colorCounts).sort((a,b)=>b[1]-a[1]);
+        return ranked.length>0?<div style={{padding:"2px 10px 6px",flexShrink:0}}>
+          <div style={{fontSize:10,fontWeight:700,color:"rgba(232,224,240,.4)",marginBottom:3}}>🧵 Thread List ({ranked.length} colors · {Object.keys(pixels).length} total pixels)</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:3,maxHeight:120,overflowY:"auto"}}>
+            {ranked.map(([color,count],i)=>{const p=PIXEL_PALETTE.find(p=>p.c===color);return <div key={color} style={{display:"flex",alignItems:"center",gap:4,background:"rgba(255,255,255,.04)",borderRadius:5,padding:"2px 6px"}}>
+              <div style={{width:14,height:14,borderRadius:2,background:color,border:"1px solid rgba(255,255,255,.15)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:7,fontWeight:800,color:parseInt(color.slice(1,3),16)*.299+parseInt(color.slice(3,5),16)*.587+parseInt(color.slice(5,7),16)*.114>128?"#000":"#fff"}}>{i+1}</span>
+              </div>
+              <span style={{fontSize:9,color:"#feca57",fontWeight:700}}>#{i+1}</span>
+              {p&&<span style={{fontSize:9,color:"#e8e0f0",fontWeight:700}}>DMC {p.n}</span>}
+              {p&&<span style={{fontSize:9,color:"rgba(232,224,240,.4)"}}>{p.nm}</span>}
+              <span style={{fontSize:8,color:"rgba(232,224,240,.3)"}}>({count}px)</span>
+            </div>;})}
           </div>
         </div>:null;
       })()}
