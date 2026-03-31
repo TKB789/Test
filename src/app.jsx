@@ -6458,7 +6458,8 @@ const NotebookPanel=()=>{
       pixLastCell.current=null;
       const cell=cellFromTouch(t);
       if(cell){pixLastCell.current=cell;pixStartPos.current=cell;}
-      if(!e.touches){e.preventDefault();if(cell)paintCell(cell.row,cell.col);} // mouse: paint immediately
+      e.preventDefault(); // Claim touch immediately so single tap works
+      if(cell)paintCell(cell.row,cell.col);
       return;
     }
     if(!pixIsPainting.current||pixCancelled.current)return;
@@ -6605,21 +6606,14 @@ const NotebookPanel=()=>{
             :<span onClick={startRename} style={{fontSize:11,fontWeight:800,color:"#e8e0f0",cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:120}}>{nbPageIdx+1}. {page.title||"Untitled"}</span>}
             <button onClick={()=>hasNext&&goNext()} style={{background:"none",border:"none",fontSize:16,color:hasNext?"#a8b4f0":"#333",cursor:hasNext?"pointer":"default",padding:"4px"}}>▶</button>
           </div>
-        <button onClick={doSave} style={btn(saved?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b"}:{color:"#aaa"})}>{saved?"Saved ✓":"Save"}</button>
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 6px",flexShrink:0,flexWrap:"wrap"}}>
-        <button onClick={()=>setPixelEraser(e=>!e)} style={btn(pixelEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",boxShadow:"0 0 8px rgba(245,87,108,.3)"}:{color:"#ccc"})}>
-          <span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span></button>
-        <div style={{width:1,height:20,background:"rgba(255,255,255,.1)",margin:"0 2px"}}/>
-        <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={btn({padding:"4px 8px"})}>−</button>
-        <span style={{fontSize:11,opacity:.4,minWidth:32,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
-        <button onClick={()=>setPageZoom(z=>Math.min(6,z+0.2))} style={btn({padding:"4px 8px"})}>+</button>
-        <div style={{width:1,height:20,background:"rgba(255,255,255,.1)",margin:"0 2px"}}/>
-        {DMC_CONVERT_PALETTE.slice(0,12).map(p=>(<div key={p.c} onClick={()=>{setPixelColor(p.c);setPixelEraser(false);}} style={{width:20,height:20,borderRadius:4,background:p.c,border:pixelColor===p.c&&!pixelEraser?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer",opacity:pixelEraser?.4:1}}/>))}
-        <button onClick={()=>setShowPixPicker(v=>!v)} style={btn({padding:"4px 6px",fontSize:11,color:showPixPicker?"#feca57":"#888"})}>🎨</button>
-        <div style={{flex:1}}/>
-        <button onClick={archiveCurrentPage} style={btn({color:"#888",padding:"4px 6px",fontSize:11})}>🗃️</button>
-        <button onClick={deleteCurrentPage} style={btn({color:"#888",padding:"4px 6px",fontSize:11})}>🗑️</button>
+      {/* Row 1: Color palette — primary picks + expand */}
+      <div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
+        <button onClick={()=>setPixelEraser(e=>!e)} style={btn(pixelEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",boxShadow:"0 0 8px rgba(245,87,108,.3)",padding:"4px 8px"}:{color:"#ccc",padding:"4px 8px"})}>
+          {pixelEraser?"🧹":"✏️"}</button>
+        <div style={{width:1,height:20,background:"rgba(255,255,255,.1)"}}/>
+        {DMC_CONVERT_PALETTE.slice(0,12).map(p=>(<div key={p.c} onClick={()=>{setPixelColor(p.c);setPixelEraser(false);}} style={{width:22,height:22,borderRadius:4,background:p.c,border:pixelColor===p.c&&!pixelEraser?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer",opacity:pixelEraser?.4:1}}/>))}
+        <button onClick={()=>{setShowPixPicker(v=>!v);setPixPaletteSearch("");}} style={btn({padding:"4px 8px",fontSize:11,color:showPixPicker?"#feca57":"#888"})}>{showPixPicker?"▼":"🎨"}</button>
       </div>
       {/* Full DMC color picker */}
       {showPixPicker&&<div style={{padding:"4px 10px 6px",flexShrink:0}}>
@@ -6634,19 +6628,31 @@ const NotebookPanel=()=>{
           <span style={{opacity:.6}}> — {PIXEL_PALETTE.find(p=>p.c===pixelColor)?.nm||"Custom"}</span>
         </div>
       </div>}
+      {/* Row 2: Tools — zoom, import, grid, numbers */}
       <div style={{display:"flex",alignItems:"center",gap:3,padding:"0 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
-        <button onClick={()=>{if(!confirm("Clear all?"))return;const d=readNb();if(d.pages?.[nbPageIdx]){d.pages[nbPageIdx].pixels={};writeNb(d);drawPixelGrid();}}}
-          style={btn({background:"rgba(245,87,108,.1)",border:"1px solid rgba(245,87,108,.2)",color:"#f5576c",fontSize:10,padding:"3px 8px"})}>Clear</button>
-        <button onClick={()=>importImage(false)} disabled={pixImporting}
-          style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:10,padding:"3px 7px"})}>{pixImporting?"...":"📷36"}</button>
-        <button onClick={()=>importImage(true)} disabled={pixImporting}
-          style={btn({background:"rgba(240,147,251,.1)",border:"1px solid rgba(240,147,251,.2)",color:"#f093fb",fontSize:10,padding:"3px 7px"})}>{pixImporting?"...":"📷Full"}</button>
+        <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={btn({padding:"3px 7px",fontSize:11})}>−</button>
+        <span style={{fontSize:10,opacity:.4,minWidth:28,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
+        <button onClick={()=>setPageZoom(z=>Math.min(6,z+0.2))} style={btn({padding:"3px 7px",fontSize:11})}>+</button>
         <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
-        <button onClick={()=>{setShowPixNumbers(v=>{const nv=!v;setTimeout(drawPixelGrid,10);return nv;});}} style={btn(showPixNumbers?{background:"rgba(254,202,87,.12)",border:"1px solid rgba(254,202,87,.4)",color:"#feca57",fontSize:10,padding:"3px 7px"}:{fontSize:10,padding:"3px 7px",color:"#888"})}>#</button>
-        <button onClick={printPixelArt} style={btn({fontSize:10,padding:"3px 7px",color:"#888"})}>🖨️</button>
+        <button onClick={()=>importImage(false)} disabled={pixImporting}
+          style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:10,padding:"3px 7px"})}>{pixImporting?"...":"📷 36-Color"}</button>
+        <button onClick={()=>importImage(true)} disabled={pixImporting}
+          style={btn({background:"rgba(240,147,251,.1)",border:"1px solid rgba(240,147,251,.2)",color:"#f093fb",fontSize:10,padding:"3px 7px"})}>{pixImporting?"...":"📷 Full"}</button>
+        <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
+        <button onClick={()=>{setShowPixNumbers(v=>{const nv=!v;setTimeout(drawPixelGrid,10);return nv;});}} style={btn(showPixNumbers?{background:"rgba(254,202,87,.12)",border:"1px solid rgba(254,202,87,.4)",color:"#feca57",fontSize:10,padding:"3px 7px"}:{fontSize:10,padding:"3px 7px",color:"#888"})}># Nums</button>
         <span style={{fontSize:10,opacity:.3,fontWeight:700}}>Grid:</span>
-        {[{v:0,l:"Off"},{v:5,l:"5×5"},{v:10,l:"10×10"},{v:20,l:"20×20"}].map(g=>(
-          <button key={g.v} onClick={()=>setPixelGridLines(g.v)} style={{padding:"2px 6px",borderRadius:6,fontSize:10,fontWeight:700,border:pixelGridLines===g.v?"1px solid rgba(254,202,87,.5)":"1px solid rgba(255,255,255,.06)",background:pixelGridLines===g.v?"rgba(254,202,87,.12)":"transparent",color:pixelGridLines===g.v?"#feca57":"#666",cursor:"pointer"}}>{g.l}</button>))}
+        {[{v:0,l:"Off"},{v:5,l:"5"},{v:10,l:"10"},{v:20,l:"20"}].map(g=>(
+          <button key={g.v} onClick={()=>setPixelGridLines(g.v)} style={{padding:"2px 5px",borderRadius:6,fontSize:10,fontWeight:700,border:pixelGridLines===g.v?"1px solid rgba(254,202,87,.5)":"1px solid rgba(255,255,255,.06)",background:pixelGridLines===g.v?"rgba(254,202,87,.12)":"transparent",color:pixelGridLines===g.v?"#feca57":"#666",cursor:"pointer"}}>{g.l}</button>))}
+      </div>
+      {/* Row 3: Actions — all labeled */}
+      <div style={{display:"flex",alignItems:"center",gap:4,padding:"0 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
+        <button onClick={()=>{if(!confirm("Clear all pixels?"))return;const d=readNb();if(d.pages?.[nbPageIdx]){d.pages[nbPageIdx].pixels={};writeNb(d);drawPixelGrid();}}}
+          style={btn({background:"rgba(245,87,108,.08)",border:"1px solid rgba(245,87,108,.2)",color:"#f5576c",fontSize:10,padding:"3px 8px"})}>🗑 Clear</button>
+        <div style={{flex:1}}/>
+        <button onClick={printPixelArt} style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>🖨 Print</button>
+        <button onClick={doSave} style={btn(saved?{background:"rgba(67,233,123,.12)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b",fontSize:10,padding:"3px 8px"}:{fontSize:10,padding:"3px 8px",color:"#888"})}>💾 {saved?"Saved":"Save"}</button>
+        <button onClick={archiveCurrentPage} style={btn({color:"#888",fontSize:10,padding:"3px 8px"})}>🗃 Archive</button>
+        <button onClick={deleteCurrentPage} style={btn({color:"#888",fontSize:10,padding:"3px 8px"})}>🗑 Delete</button>
       </div>
       {/* Thread list for pixel art — shows used DMC colors with thread info for purchasing */}
       {showPixPicker&&(()=>{const pixels=getPixels();const usedHexes=[...new Set(Object.values(pixels))];const usedDmc=usedHexes.map(h=>PIXEL_PALETTE.find(p=>p.c===h)).filter(Boolean).sort((a,b)=>String(a.n).localeCompare(String(b.n),undefined,{numeric:true}));
