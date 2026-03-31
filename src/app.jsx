@@ -6420,8 +6420,24 @@ const NotebookPanel=()=>{
   const pixColorRef=React.useRef(pixelColor);pixColorRef.current=pixelColor;
   const pixEraserRef=React.useRef(pixelEraser);pixEraserRef.current=pixelEraser;
   const pixStartPos=React.useRef(null);const pixMoved=React.useRef(false);const pixCancelled=React.useRef(false);
+  const pixLastCell=React.useRef(null);
   // Pinch zoom
   const pixPinchDist=React.useRef(null);
+  const cellFromTouch=(t)=>{
+    const c=pixCanvasRef.current;if(!c)return null;
+    const r=c.getBoundingClientRect();const sx=c.width/r.width,sy=c.height/r.height;
+    const dims=getPixelDims();const cs=getPixelCellSize();
+    const col=Math.floor(((t.clientX-r.left)*sx)/cs);const row=Math.floor(((t.clientY-r.top)*sy)/cs);
+    if(row>=0&&row<dims.r&&col>=0&&col<dims.c)return{row,col};return null;
+  };
+  const paintCell=(row,col)=>{setPixel(row,col,pixColorRef.current,pixEraserRef.current);};
+  // Bresenham line between two cells to fill gaps during fast strokes
+  const paintLine=(r0,c0,r1,c1)=>{
+    const dr=Math.abs(r1-r0),dc=Math.abs(c1-c0);
+    const sr=r0<r1?1:-1,sc=c0<c1?1:-1;
+    let err=dc-dr,r=r0,c=c0;
+    while(true){paintCell(r,c);if(r===r1&&c===c1)break;const e2=2*err;if(e2>-dr){err-=dr;c+=sc;}if(e2<dc){err+=dc;r+=sr;}}
+  };
   const handlePixEvent=(e,isStart)=>{
     // Two+ fingers = gesture — cancel painting, handle pinch zoom
     if(e.touches&&e.touches.length>1){
@@ -6433,34 +6449,50 @@ const NotebookPanel=()=>{
         if(Math.abs(scale-1)>0.01)setPageZoom(z=>Math.max(0.3,Math.min(8,z*scale)));
       }
       pixPinchDist.current=dist;
-      // Don't preventDefault — let browser also handle native pan
       return;
     }
     pixPinchDist.current=null;
     const t=e.touches?e.touches[0]:e;
     if(isStart){
-      pixIsPainting.current=true;pixCancelled.current=false;
-      // Don't preventDefault on touch start — allow browser to determine if it's a scroll
-      if(!e.touches){e.preventDefault();paintPixAt(t);} // mouse only
+      pixIsPainting.current=true;pixCancelled.current=false;pixMoved.current=false;
+      pixLastCell.current=null;
+      const cell=cellFromTouch(t);
+      if(cell){pixLastCell.current=cell;pixStartPos.current=cell;}
+      if(!e.touches){e.preventDefault();if(cell)paintCell(cell.row,cell.col);} // mouse: paint immediately
       return;
     }
     if(!pixIsPainting.current||pixCancelled.current)return;
-    e.preventDefault();paintPixAt(t);
+    e.preventDefault();pixMoved.current=true;
+    const cell=cellFromTouch(t);if(!cell)return;
+    const last=pixLastCell.current;
+    if(last&&(last.row!==cell.row||last.col!==cell.col)){
+      paintLine(last.row,last.col,cell.row,cell.col);
+    }else{paintCell(cell.row,cell.col);}
+    pixLastCell.current=cell;
   };
   const handlePixEnd=(e)=>{
-    // On touch end, if we never moved (single tap), paint that pixel
+    // On touch end: if we barely moved (single tap or tiny drag), paint at the touch point
     if(pixIsPainting.current&&!pixCancelled.current&&e.changedTouches){
-      const t=e.changedTouches[0];paintPixAt(t);
+      const t=e.changedTouches[0];
+      const cell=cellFromTouch(t);
+      if(cell){
+        if(!pixMoved.current){
+          // Single tap — paint this cell
+          paintCell(cell.row,cell.col);
+        }else{
+          // End of drag — connect last point
+          const last=pixLastCell.current;
+          if(last&&(last.row!==cell.row||last.col!==cell.col)){
+            paintLine(last.row,last.col,cell.row,cell.col);
+          }
+        }
+      }
     }
-    pixPinchDist.current=null;
+    pixPinchDist.current=null;pixLastCell.current=null;
     pixIsPainting.current=false;pixCancelled.current=false;
   };
   const paintPixAt=(t)=>{
-    const c=pixCanvasRef.current;if(!c)return;
-    const r=c.getBoundingClientRect();const sx=c.width/r.width,sy=c.height/r.height;
-    const dims=getPixelDims();const cs=getPixelCellSize();
-    const col=Math.floor(((t.clientX-r.left)*sx)/cs);const row=Math.floor(((t.clientY-r.top)*sy)/cs);
-    if(row>=0&&row<dims.r&&col>=0&&col<dims.c)setPixel(row,col,pixColorRef.current,pixEraserRef.current);
+    const cell=cellFromTouch(t);if(cell)paintCell(cell.row,cell.col);
   };
   const pixCanvasCallbackRef=React.useCallback((node)=>{if(node){pixCanvasRef.current=node;
     node.addEventListener("touchstart",(e)=>handlePixEvent(e,true),{passive:false});
