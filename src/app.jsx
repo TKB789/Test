@@ -6102,6 +6102,8 @@ const NotebookPanel=()=>{
 
   // ─── PIXEL ART ──────────────────────────────────────────────────
   const pixCanvasRef=React.useRef(null);const pixIsPainting=React.useRef(false);const pixelUndoRef=React.useRef([]);const pixelRedoRef=React.useRef([]);
+  const pixScrollRef=React.useRef(null);
+  const pixPanStart=React.useRef(null); // for two-finger pan: {x, y, scrollLeft, scrollTop}
   // DMC embroidery thread color palette — full standard collection
   const PIXEL_PALETTE=[
     {n:"310",c:"#000000",nm:"Black"},{n:"3799",c:"#424240",nm:"Pewter Gray Vy Dk"},{n:"413",c:"#565656",nm:"Pewter Gray Dk"},{n:"317",c:"#6C6B6B",nm:"Pewter Gray"},
@@ -6461,18 +6463,33 @@ const NotebookPanel=()=>{
   const pixPendingStart=React.useRef(null); // delay first paint to avoid pinch-zoom accidents
   pixHandlerRef.current=(e,isStart)=>{
     if(e.touches&&e.touches.length>1){
-      // Second finger arrived — cancel any pending paint and switch to pinch mode
+      // Second finger arrived — cancel any pending paint and switch to pinch/pan mode
       if(pixPendingStart.current){clearTimeout(pixPendingStart.current);pixPendingStart.current=null;}
       pixIsPainting.current=false;pixCancelled.current=true;
+      e.preventDefault(); // prevent default scroll since we handle it
       const t1=e.touches[0],t2=e.touches[1];
+      const midX=(t1.clientX+t2.clientX)/2,midY=(t1.clientY+t2.clientY)/2;
       const dist=Math.hypot(t1.clientX-t2.clientX,t1.clientY-t2.clientY);
+      // Pinch zoom
       if(pixPinchDist.current!==null){
         const scale=dist/pixPinchDist.current;
         if(Math.abs(scale-1)>0.01)setPageZoom(z=>Math.max(0.3,Math.min(8,z*scale)));
       }
-      pixPinchDist.current=dist;return;
+      pixPinchDist.current=dist;
+      // Two-finger pan (scroll the container)
+      const sc=pixScrollRef.current;
+      if(sc){
+        if(pixPanStart.current){
+          const dx=pixPanStart.current.x-midX;
+          const dy=pixPanStart.current.y-midY;
+          sc.scrollLeft=pixPanStart.current.scrollLeft+dx;
+          sc.scrollTop=pixPanStart.current.scrollTop+dy;
+        }
+        pixPanStart.current={x:midX,y:midY,scrollLeft:sc.scrollLeft,scrollTop:sc.scrollTop};
+      }
+      return;
     }
-    pixPinchDist.current=null;
+    pixPinchDist.current=null;pixPanStart.current=null;
     const t=e.touches?e.touches[0]:e;
     if(isStart){
       pixIsPainting.current=true;pixCancelled.current=false;pixMoved.current=false;
@@ -6530,7 +6547,7 @@ const NotebookPanel=()=>{
         }
       }
     }
-    pixPinchDist.current=null;pixLastCell.current=null;
+    pixPinchDist.current=null;pixLastCell.current=null;pixPanStart.current=null;
     pixPaintedCells.current=new Set();
     pixIsPainting.current=false;pixCancelled.current=false;
   };
@@ -6761,10 +6778,10 @@ const NotebookPanel=()=>{
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,width:260}}>
-            <span style={{fontSize:11,color:"#888",flexShrink:0}}>Size</span>
+            <span style={{fontSize:11,color:"#feca57",fontWeight:700,flexShrink:0}}>Size</span>
             <input type="range" min="20" max="100" value={pixCropBox.w} onChange={(e)=>{const nw=Number(e.target.value);setPixCropBox(p=>{const nh=Math.min(100,nw*1/gridRatio);return{...p,w:nw,h:nh,x:Math.min(p.x,100-nw),y:Math.min(p.y,100-nh)};});}}
-              style={{flex:1,accentColor:"#feca57"}}/>
-            <span style={{fontSize:11,color:"#feca57",minWidth:30}}>{Math.round(pixCropBox.w)}%</span>
+              style={{flex:1,accentColor:"#feca57",filter:"contrast(1.3)"}}/>
+            <span style={{fontSize:12,color:"#feca57",fontWeight:800,minWidth:36,textAlign:"right"}}>{Math.round(pixCropBox.w)}%</span>
           </div>
           <div style={{display:"flex",gap:8}}>
             <button onClick={confirmCrop} style={{padding:"10px 24px",borderRadius:10,background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",fontSize:15,fontWeight:700,cursor:"pointer"}}>Convert</button>
@@ -6772,7 +6789,7 @@ const NotebookPanel=()=>{
           </div>
         </div>;
       })()}
-      <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch"}}>
+      <div ref={el=>{if(el)pixScrollRef.current=el;}} style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch"}}>
         <div style={{transform:`scale(${pageZoom})`,transformOrigin:"top left",width:cW/pageZoom,height:cH/pageZoom,minWidth:cW,minHeight:cH}}>
           <canvas ref={pixCanvasCallbackRef} width={cW} height={cH} style={{width:cW,height:cH,touchAction:"none",cursor:"crosshair",display:"block",imageRendering:"pixelated"}}/>
         </div></div></div>);
