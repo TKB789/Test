@@ -6901,13 +6901,25 @@ const NotebookPanel=()=>{
   }
 
   // ═══ VECTOR ART ENGINE ═══
-  // Bitmap-to-SVG with smooth contour paths (marching squares + path smoothing)
+  // Douglas-Peucker path simplification
+  const dpSimplify=(pts,epsilon)=>{
+    if(pts.length<=2)return pts;
+    let maxD=0,maxI=0;
+    const a=pts[0],b=pts[pts.length-1];
+    const dx=b.x-a.x,dy=b.y-a.y,len=Math.sqrt(dx*dx+dy*dy);
+    for(let i=1;i<pts.length-1;i++){
+      const d=len>0?Math.abs(dy*pts[i].x-dx*pts[i].y+b.x*a.y-b.y*a.x)/len:Math.hypot(pts[i].x-a.x,pts[i].y-a.y);
+      if(d>maxD){maxD=d;maxI=i;}
+    }
+    if(maxD>epsilon){const l=dpSimplify(pts.slice(0,maxI+1),epsilon);const r=dpSimplify(pts.slice(maxI),epsilon);return l.slice(0,-1).concat(r);}
+    return[pts[0],pts[pts.length-1]];
+  };
   const traceImageToSvg=(imgSrc,colorCount,callback)=>{
     const img=new Image();
     img.onerror=()=>{alert("Failed to load image");callback(null);};
     img.onload=()=>{
       try{
-      const maxDim=400;const scale=Math.min(1,maxDim/Math.max(img.width,img.height));
+      const maxDim=600;const scale=Math.min(1,maxDim/Math.max(img.width,img.height));
       const w=Math.round(img.width*scale),h=Math.round(img.height*scale);
       const tc=document.createElement("canvas");tc.width=w;tc.height=h;
       const tctx=tc.getContext("2d");tctx.drawImage(img,0,0,w,h);
@@ -6915,7 +6927,6 @@ const NotebookPanel=()=>{
       const htr=hex=>[parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];
       const fullPal=PIXEL_PALETTE.map(p=>p.c);const fullRgb=fullPal.map(htr);
       const nearFull=(r,g,b)=>{let bi=0,bd=Infinity;fullRgb.forEach(([pr,pg,pb],i)=>{const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bd){bd=d;bi=i;}});return bi;};
-      // Quantize
       const grid=new Uint16Array(w*h);const votes=new Map();
       for(let y=0;y<h;y++)for(let x=0;x<w;x++){
         const idx=(y*w+x)*4;if(data[idx+3]<30){grid[y*w+x]=65535;continue;}
@@ -6931,54 +6942,57 @@ const NotebookPanel=()=>{
         remap[i]=bi;
       }
       for(let i=0;i<grid.length;i++){if(grid[i]!==65535)grid[i]=remap[grid[i]];}
-      // Contour trace each color using marching squares → smooth SVG paths
       const usedColors=[...new Set(Array.from(grid).filter(v=>v!==65535))];
-      // Sort back-to-front by count (most used = background, drawn first)
       usedColors.sort((a,b)=>(votes.get(b)||0)-(votes.get(a)||0));
       let paths="";
+      const eps=Math.max(0.8,Math.min(w,h)/200);
       usedColors.forEach(ci=>{
-        // Build padded binary mask
         const mw=w+2,mh=h+2;const mask=new Uint8Array(mw*mh);
         for(let y=0;y<h;y++)for(let x=0;x<w;x++){if(grid[y*w+x]===ci)mask[(y+1)*mw+(x+1)]=1;}
-        // Find contours using border following
         const visited=new Uint8Array(mw*mh);
         const contours=[];
-        for(let y=0;y<mh-1;y++)for(let x=0;x<mw-1;x++){
-          if(mask[y*mw+x]===0&&mask[y*mw+x+1]===1&&!visited[y*mw+x+1]){
-            // Trace contour
-            const pts=[];let cx=x+1,cy=y,dir=0; // dir: 0=right,1=down,2=left,3=up
-            const dx=[1,0,-1,0],dy=[0,1,0,-1];
-            let steps=0;const maxSteps=mw*mh*4;
+        for(let y=1;y<mh-1;y++)for(let x=1;x<mw-1;x++){
+          if(mask[y*mw+x]===1&&mask[y*mw+(x-1)]===0&&!visited[y*mw+x]){
+            const pts=[];let cx=x,cy=y,bx=x-1,by=y;
+            let steps=0;const maxSteps=(mw+mh)*4;
+            const sx=cx,sy=cy;
             do{
-              pts.push({x:cx,y:cy});visited[cy*mw+cx]=1;
-              // Turn left, go straight, turn right, go back
-              for(let t=0;t<4;t++){
-                const nd=(dir+3+t)%4;const nx=cx+dx[nd],ny=cy+dy[nd];
-                if(nx>=0&&nx<mw&&ny>=0&&ny<mh&&mask[ny*mw+nx]===1){dir=nd;cx=nx;cy=ny;break;}
+              pts.push({x:cx-1,y:cy-1});
+              visited[cy*mw+cx]=1;
+              const ndx=[0,1,1,1,0,-1,-1,-1],ndy=[-1,-1,0,1,1,1,0,-1];
+              let startDir=0;
+              for(let d=0;d<8;d++){if(cx+ndx[d]===bx&&cy+ndy[d]===by){startDir=d;break;}}
+              let found=false;
+              for(let d=1;d<=8;d++){
+                const nd=(startDir+d)%8;
+                const nx=cx+ndx[nd],ny=cy+ndy[nd];
+                if(nx>=0&&nx<mw&&ny>=0&&ny<mh&&mask[ny*mw+nx]===1){
+                  bx=cx;by=cy;cx=nx;cy=ny;found=true;break;
+                }
               }
+              if(!found)break;
               steps++;
-            }while((cx!==x+1||cy!==y)&&steps<maxSteps);
-            if(pts.length>2)contours.push(pts);
+            }while((cx!==sx||cy!==sy)&&steps<maxSteps);
+            if(pts.length>4)contours.push(pts);
           }
         }
-        // Convert contour points to smooth SVG path with cubic bezier curves
-        contours.forEach(pts=>{
-          if(pts.length<3)return;
-          // Offset to account for padding (-1)
-          const op=pts.map(p=>({x:p.x-1,y:p.y-1}));
-          // Catmull-Rom to cubic bezier for smooth curves
-          let d=`M${op[0].x},${op[0].y}`;
+        contours.forEach(rawPts=>{
+          const simplified=dpSimplify(rawPts,eps);
+          if(simplified.length<3)return;
+          const op=simplified;
+          let d=`M${op[0].x.toFixed(1)},${op[0].y.toFixed(1)}`;
           for(let i=0;i<op.length;i++){
             const p0=op[(i-1+op.length)%op.length];
             const p1=op[i];
             const p2=op[(i+1)%op.length];
             const p3=op[(i+2)%op.length];
-            const cp1x=p1.x+(p2.x-p0.x)/6,cp1y=p1.y+(p2.y-p0.y)/6;
-            const cp2x=p2.x-(p3.x-p1.x)/6,cp2y=p2.y-(p3.y-p1.y)/6;
-            d+=`C${cp1x.toFixed(1)},${cp1y.toFixed(1)},${cp2x.toFixed(1)},${cp2y.toFixed(1)},${p2.x},${p2.y}`;
+            const t=0.4;
+            const cp1x=p1.x+(p2.x-p0.x)*t/2,cp1y=p1.y+(p2.y-p0.y)*t/2;
+            const cp2x=p2.x-(p3.x-p1.x)*t/2,cp2y=p2.y-(p3.y-p1.y)*t/2;
+            d+=`C${cp1x.toFixed(1)},${cp1y.toFixed(1)},${cp2x.toFixed(1)},${cp2y.toFixed(1)},${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
           }
           d+="Z";
-          paths+=`<path d="${d}" fill="${fullPal[ci]}" stroke="${fullPal[ci]}" stroke-width="0.3" stroke-linejoin="round"/>`;
+          paths+=`<path d="${d}" fill="${fullPal[ci]}"/>`;
         });
       });
       const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w*2}" height="${h*2}" style="background:#fff">${paths}</svg>`;
