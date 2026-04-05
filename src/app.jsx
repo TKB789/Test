@@ -7066,11 +7066,25 @@ const NotebookPanel=()=>{
         <button onClick={()=>{setVecShowPicker(v=>!v);setVecPaletteSearch("");}} style={btn({padding:"3px 7px",fontSize:10,color:vecShowPicker?"#feca57":"#888"})}>{vecShowPicker?"▼ Palette":"🎨 Palette"}</button>
         <div style={{flex:1}}/>
         {hasVecContent&&<button onClick={()=>{
+          const imgSrc=vecPng;if(!imgSrc)return;
+          const legendHtml=vecColors.map((c,i)=>`<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:14px;border-radius:3px;background:${c.color};border:1px solid #ccc;display:inline-block"></span><b>#${i+1}</b> DMC ${c.dmc?.n||"?"} ${c.dmc?.nm||""} <span style="color:#888">(${c.count}px)</span></span>`).join("");
           const win=window.open("","_blank");
-          if(win){const legendHtml=vecColors.map((c,i)=>`<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:14px;border-radius:3px;background:${c.color};border:1px solid #ccc;display:inline-block"></span><b>#${i+1}</b> DMC ${c.dmc?.n||"?"} ${c.dmc?.nm||""} <span style="color:#888">(${c.count}px)</span></span>`).join("");
-            const imgHtml=vecSvg?`<div style="max-width:100%;overflow:auto">${vecSvg}</div>`:`<img src="${vecPng}" style="max-width:100%;height:auto"/>`;
-            win.document.write(`<html><head><title>${page.title||"Vector Art"}</title><style>@media print{body{margin:0}}</style></head><body style="margin:0;background:#fff;display:flex;flex-direction:column;align-items:center;padding:12px"><h3 style="margin:4px 0;font-family:sans-serif">${page.title||"Vector Art"}</h3>${imgHtml}<div style="margin:8px 0;font-family:sans-serif;font-size:12px;display:flex;flex-wrap:wrap;gap:10px">${legendHtml}</div><button onclick="window.print()" style="padding:10px 30px;font-size:16px;margin:8px;cursor:pointer">🖨️ Print</button></body></html>`);win.document.close();}
+          if(win){win.document.write(`<html><head><title>${page.title||"Vector Art"}</title><style>@media print{body{margin:0}.no-print{display:none}}body{font-family:sans-serif;margin:0;padding:12px;display:flex;flex-direction:column;align-items:center}img{max-width:100%;height:auto}</style></head><body><h3 style="margin:4px 0">${page.title||"Vector Art"}</h3><img src="${imgSrc}"/><div style="margin:8px 0;font-size:12px;display:flex;flex-wrap:wrap;gap:10px">${legendHtml}</div><div class="no-print" style="margin:8px;display:flex;gap:8px;flex-wrap:wrap"><button onclick="window.print()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">🖨️ Print / Save PDF</button></div></body></html>`);win.document.close();}
         }} style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>🖨 Print</button>}
+        {hasVecContent&&<button onClick={()=>{
+          const imgSrc=vecPng;if(!imgSrc)return;
+          const pages=prompt("How many pages across? (e.g. 2 = 2×2 = 4 pages, 3 = 3×3 = 9 pages)","2");
+          if(!pages)return;const n=Math.max(1,Math.min(6,Number(pages)||2));
+          const legendHtml=vecColors.map((c,i)=>`<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px"><span style="width:12px;height:12px;border-radius:3px;background:${c.color};border:1px solid #ccc;display:inline-block"></span><b>#${i+1}</b> ${c.dmc?.n||""}</span>`).join("");
+          let tilesHtml="";
+          for(let row=0;row<n;row++)for(let col=0;col<n;col++){
+            const pctW=100*n,pctH=100*n;
+            const offX=-col*100,offY=-row*100;
+            tilesHtml+=`<div style="page-break-after:always;width:100vw;height:100vh;overflow:hidden;position:relative;box-sizing:border-box;border:1px solid #eee"><div style="position:absolute;top:4px;left:4px;font-size:10px;color:#888;z-index:1">Page ${row*n+col+1}/${n*n} (R${row+1}C${col+1})</div><img src="${imgSrc}" style="position:absolute;left:${offX}%;top:${offY}%;width:${pctW}%;height:${pctH}%;object-fit:fill"/></div>`;
+          }
+          const win=window.open("","_blank");
+          if(win){win.document.write(`<html><head><title>${page.title||"Vector Art"} - ${n}×${n} Tiled</title><style>@media print{body{margin:0}.no-print{display:none}}body{margin:0;padding:0}</style></head><body>${tilesHtml}<div class="no-print" style="padding:12px;text-align:center"><div style="margin:8px 0;font-size:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center">${legendHtml}</div><button onclick="window.print()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">🖨️ Print ${n}×${n} Pages / Save PDF</button></div></body></html>`);win.document.close();}
+        }} style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>🖨 Multi-Page</button>}
         {vecSvg&&<button onClick={()=>{const blob=new Blob([vecSvg],{type:"image/svg+xml"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=(page.title||"vector")+".svg";a.click();URL.revokeObjectURL(url);}}
           style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>💾 SVG</button>}
         <button onClick={archiveCurrentPage} style={btn({color:"#888",padding:"3px 7px",fontSize:10})}>🗃️</button>
