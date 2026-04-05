@@ -6338,6 +6338,10 @@ const NotebookPanel=()=>{
   const[customPixelH,setCustomPixelH]=useState("100");
   const[showPixNumbers,setShowPixNumbers]=useState(false);
   const[showPixPicker,setShowPixPicker]=useState(false);
+  const[showMoreColors,setShowMoreColors]=useState(false);
+  const[customColorCount,setCustomColorCount]=useState("48");
+  const[showVecMoreColors,setShowVecMoreColors]=useState(false);
+  const[vecCustomColorCount,setVecCustomColorCount]=useState("48");
   const[pixPaletteSearch,setPixPaletteSearch]=useState("");
   const[pixCustomLabels,setPixCustomLabels]=useState(()=>{try{return JSON.parse(localStorage.getItem("zobuddy_pix_labels"))||{};}catch{return{};}});
   const savePixLabels=(l)=>{setPixCustomLabels(l);try{localStorage.setItem("zobuddy_pix_labels",JSON.stringify(l));}catch{}};
@@ -6802,10 +6806,16 @@ const NotebookPanel=()=>{
           style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{pixImporting?"...":"📷8"}</button>
         <button onClick={()=>importImage(16)} disabled={pixImporting}
           style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{pixImporting?"...":"📷16"}</button>
-        <button onClick={()=>importImage(36)} disabled={pixImporting}
-          style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{pixImporting?"...":"📷36"}</button>
-        <button onClick={()=>importImage(0)} disabled={pixImporting}
-          style={btn({background:"rgba(240,147,251,.1)",border:"1px solid rgba(240,147,251,.2)",color:"#f093fb",fontSize:9,padding:"3px 6px"})}>{pixImporting?"...":"📷All"}</button>
+        <button onClick={()=>importImage(32)} disabled={pixImporting}
+          style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{pixImporting?"...":"📷32"}</button>
+        <button onClick={()=>setShowMoreColors(v=>!v)} style={btn({fontSize:9,padding:"3px 6px",color:showMoreColors?"#feca57":"#888"})}>{showMoreColors?"▼":"▶"}More</button>
+        {showMoreColors&&<>
+          <input value={customColorCount} onChange={e=>setCustomColorCount(e.target.value.replace(/\D/g,""))} style={{width:36,padding:"2px 4px",borderRadius:4,border:"1px solid rgba(102,126,234,.3)",background:"rgba(102,126,234,.06)",color:"#a8b4f0",fontSize:10,fontWeight:700,textAlign:"center",outline:"none"}}/>
+          <button onClick={()=>{const n=Math.max(2,Math.min(438,Number(customColorCount)||32));importImage(n);}} disabled={pixImporting}
+            style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{pixImporting?"...":"📷Go"}</button>
+          <button onClick={()=>importImage(0)} disabled={pixImporting}
+            style={btn({background:"rgba(240,147,251,.1)",border:"1px solid rgba(240,147,251,.2)",color:"#f093fb",fontSize:9,padding:"3px 6px"})}>{pixImporting?"...":"📷All"}</button>
+        </>}
         <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
         <button onClick={()=>{setShowPixNumbers(v=>{const nv=!v;setTimeout(drawPixelGrid,10);return nv;});}} style={btn(showPixNumbers?{background:"rgba(254,202,87,.12)",border:"1px solid rgba(254,202,87,.4)",color:"#feca57",fontSize:10,padding:"3px 7px"}:{fontSize:10,padding:"3px 7px",color:"#888"})}># Nums</button>
         <span style={{fontSize:10,opacity:.3,fontWeight:700}}>Grid:</span>
@@ -6891,81 +6901,87 @@ const NotebookPanel=()=>{
   }
 
   // ═══ VECTOR ART ENGINE ═══
-  // Bitmap-to-SVG: quantize colors to DMC palette, then trace each color region into SVG paths
+  // Bitmap-to-SVG with smooth contour paths (marching squares + path smoothing)
   const traceImageToSvg=(imgSrc,colorCount,callback)=>{
     const img=new Image();
     img.onerror=()=>{alert("Failed to load image");callback(null);};
     img.onload=()=>{
       try{
-      // Scale down for performance (max 256px on longest side)
-      const maxDim=256;const scale=Math.min(1,maxDim/Math.max(img.width,img.height));
+      const maxDim=400;const scale=Math.min(1,maxDim/Math.max(img.width,img.height));
       const w=Math.round(img.width*scale),h=Math.round(img.height*scale);
       const tc=document.createElement("canvas");tc.width=w;tc.height=h;
       const tctx=tc.getContext("2d");tctx.drawImage(img,0,0,w,h);
       const data=tctx.getImageData(0,0,w,h).data;
-      // Quantize to DMC palette
       const htr=hex=>[parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];
       const fullPal=PIXEL_PALETTE.map(p=>p.c);const fullRgb=fullPal.map(htr);
       const nearFull=(r,g,b)=>{let bi=0,bd=Infinity;fullRgb.forEach(([pr,pg,pb],i)=>{const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bd){bd=d;bi=i;}});return bi;};
-      // Build quantized grid
-      const grid=new Uint16Array(w*h);
-      const votes=new Map();
+      // Quantize
+      const grid=new Uint16Array(w*h);const votes=new Map();
       for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-        const idx=(y*w+x)*4;const a=data[idx+3];
-        if(a<30){grid[y*w+x]=65535;continue;}
-        const bi=nearFull(data[idx],data[idx+1],data[idx+2]);
-        grid[y*w+x]=bi;votes.set(bi,(votes.get(bi)||0)+1);
+        const idx=(y*w+x)*4;if(data[idx+3]<30){grid[y*w+x]=65535;continue;}
+        const bi=nearFull(data[idx],data[idx+1],data[idx+2]);grid[y*w+x]=bi;votes.set(bi,(votes.get(bi)||0)+1);
       }
-      // Pick top N colors
       const topN=[...votes.entries()].sort((a,b)=>b[1]-a[1]).slice(0,colorCount===0?votes.size:colorCount);
       const allowedSet=new Set(topN.map(e=>e[0]));
-      // Remap to nearest allowed color
       const remap=new Uint16Array(fullPal.length);
       for(let i=0;i<fullPal.length;i++){
         if(allowedSet.has(i)){remap[i]=i;continue;}
-        let bd=Infinity,bi=topN[0][0];
-        const[r,g,b]=fullRgb[i];
+        let bd=Infinity,bi=topN[0][0];const[r,g,b]=fullRgb[i];
         topN.forEach(([ci])=>{const[pr,pg,pb]=fullRgb[ci];const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bd){bd=d;bi=ci;}});
         remap[i]=bi;
       }
       for(let i=0;i<grid.length;i++){if(grid[i]!==65535)grid[i]=remap[grid[i]];}
-      // Trace each color into SVG path using simple contour tracing
+      // Contour trace each color using marching squares → smooth SVG paths
       const usedColors=[...new Set(Array.from(grid).filter(v=>v!==65535))];
+      // Sort back-to-front by count (most used = background, drawn first)
+      usedColors.sort((a,b)=>(votes.get(b)||0)-(votes.get(a)||0));
       let paths="";
       usedColors.forEach(ci=>{
-        // Create binary mask for this color
-        const mask=new Uint8Array((w+2)*(h+2)); // padded by 1px border
-        for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-          if(grid[y*w+x]===ci)mask[(y+1)*(w+2)+(x+1)]=1;
-        }
-        // Simple raster-to-path: for each cell, add rect (grouped for simplicity)
-        // Use run-length encoding per row for fewer rects
-        for(let y=0;y<h;y++){
-          let x=0;
-          while(x<w){
-            if(grid[y*w+x]===ci){
-              let runEnd=x+1;while(runEnd<w&&grid[y*w+runEnd]===ci)runEnd++;
-              // Merge with rows below if same run
-              let yEnd=y+1;
-              while(yEnd<h){
-                let match=true;
-                for(let xx=x;xx<runEnd;xx++){if(grid[yEnd*w+xx]!==ci){match=false;break;}}
-                // Check nothing extra on sides
-                if(match&&(x>0&&grid[yEnd*w+(x-1)]===ci))match=false;
-                if(match&&(runEnd<w&&grid[yEnd*w+runEnd]===ci))match=false;
-                if(!match)break;
-                yEnd++;
+        // Build padded binary mask
+        const mw=w+2,mh=h+2;const mask=new Uint8Array(mw*mh);
+        for(let y=0;y<h;y++)for(let x=0;x<w;x++){if(grid[y*w+x]===ci)mask[(y+1)*mw+(x+1)]=1;}
+        // Find contours using border following
+        const visited=new Uint8Array(mw*mh);
+        const contours=[];
+        for(let y=0;y<mh-1;y++)for(let x=0;x<mw-1;x++){
+          if(mask[y*mw+x]===0&&mask[y*mw+x+1]===1&&!visited[y*mw+x+1]){
+            // Trace contour
+            const pts=[];let cx=x+1,cy=y,dir=0; // dir: 0=right,1=down,2=left,3=up
+            const dx=[1,0,-1,0],dy=[0,1,0,-1];
+            let steps=0;const maxSteps=mw*mh*4;
+            do{
+              pts.push({x:cx,y:cy});visited[cy*mw+cx]=1;
+              // Turn left, go straight, turn right, go back
+              for(let t=0;t<4;t++){
+                const nd=(dir+3+t)%4;const nx=cx+dx[nd],ny=cy+dy[nd];
+                if(nx>=0&&nx<mw&&ny>=0&&ny<mh&&mask[ny*mw+nx]===1){dir=nd;cx=nx;cy=ny;break;}
               }
-              // Mark merged cells as visited by using a temp value
-              paths+=`<rect x="${x}" y="${y}" width="${runEnd-x}" height="${yEnd-y}" fill="${fullPal[ci]}"/>`;
-              for(let yy=y;yy<yEnd;yy++)for(let xx=x;xx<runEnd;xx++)grid[yy*w+xx]=65534;
-              x=runEnd;
-            }else x++;
+              steps++;
+            }while((cx!==x+1||cy!==y)&&steps<maxSteps);
+            if(pts.length>2)contours.push(pts);
           }
         }
-        // Restore grid for next color (65534 back to ci) — not needed since each color processes independently
+        // Convert contour points to smooth SVG path with cubic bezier curves
+        contours.forEach(pts=>{
+          if(pts.length<3)return;
+          // Offset to account for padding (-1)
+          const op=pts.map(p=>({x:p.x-1,y:p.y-1}));
+          // Catmull-Rom to cubic bezier for smooth curves
+          let d=`M${op[0].x},${op[0].y}`;
+          for(let i=0;i<op.length;i++){
+            const p0=op[(i-1+op.length)%op.length];
+            const p1=op[i];
+            const p2=op[(i+1)%op.length];
+            const p3=op[(i+2)%op.length];
+            const cp1x=p1.x+(p2.x-p0.x)/6,cp1y=p1.y+(p2.y-p0.y)/6;
+            const cp2x=p2.x-(p3.x-p1.x)/6,cp2y=p2.y-(p3.y-p1.y)/6;
+            d+=`C${cp1x.toFixed(1)},${cp1y.toFixed(1)},${cp2x.toFixed(1)},${cp2y.toFixed(1)},${p2.x},${p2.y}`;
+          }
+          d+="Z";
+          paths+=`<path d="${d}" fill="${fullPal[ci]}" stroke="${fullPal[ci]}" stroke-width="0.3" stroke-linejoin="round"/>`;
+        });
       });
-      const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w*3}" height="${h*3}">${paths}</svg>`;
+      const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w*2}" height="${h*2}" style="background:#fff">${paths}</svg>`;
       const colorInfo=topN.map(([ci,count])=>({color:fullPal[ci],dmc:PIXEL_PALETTE[ci],count}));
       callback({svg,width:w,height:h,colors:colorInfo});
       }catch(err){alert("Error: "+err.message);callback(null);}
@@ -7019,9 +7035,20 @@ const NotebookPanel=()=>{
       {/* Row 2: import options */}
       <div style={{display:"flex",alignItems:"center",gap:3,padding:"2px 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
         <span style={{fontSize:10,opacity:.4,fontWeight:700}}>Convert:</span>
-        {[{n:8,l:"8"},{n:16,l:"16"},{n:36,l:"36"},{n:0,l:"All"}].map(o=>(
-          <button key={o.n} onClick={()=>vecConvert(o.n)} disabled={vecImporting}
-            style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{vecImporting?"...":"📷"+o.l}</button>))}
+        <button onClick={()=>vecConvert(8)} disabled={vecImporting}
+          style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{vecImporting?"...":"📷8"}</button>
+        <button onClick={()=>vecConvert(16)} disabled={vecImporting}
+          style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{vecImporting?"...":"📷16"}</button>
+        <button onClick={()=>vecConvert(32)} disabled={vecImporting}
+          style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{vecImporting?"...":"📷32"}</button>
+        <button onClick={()=>setShowVecMoreColors(v=>!v)} style={btn({fontSize:9,padding:"3px 6px",color:showVecMoreColors?"#feca57":"#888"})}>{showVecMoreColors?"▼":"▶"}More</button>
+        {showVecMoreColors&&<>
+          <input value={vecCustomColorCount} onChange={e=>setVecCustomColorCount(e.target.value.replace(/\D/g,""))} style={{width:36,padding:"2px 4px",borderRadius:4,border:"1px solid rgba(102,126,234,.3)",background:"rgba(102,126,234,.06)",color:"#a8b4f0",fontSize:10,fontWeight:700,textAlign:"center",outline:"none"}}/>
+          <button onClick={()=>{const n=Math.max(2,Math.min(438,Number(vecCustomColorCount)||32));vecConvert(n);}} disabled={vecImporting}
+            style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{vecImporting?"...":"📷Go"}</button>
+          <button onClick={()=>vecConvert(0)} disabled={vecImporting}
+            style={btn({background:"rgba(240,147,251,.1)",border:"1px solid rgba(240,147,251,.2)",color:"#f093fb",fontSize:9,padding:"3px 6px"})}>{vecImporting?"...":"📷All"}</button>
+        </>}
         <div style={{flex:1}}/>
         <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={btn({padding:"3px 7px",fontSize:11})}>−</button>
         <span style={{fontSize:10,opacity:.4,minWidth:28,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
@@ -7194,7 +7221,7 @@ const NotebookPanel=()=>{
   // ═══ TABLE OF CONTENTS ═══
   return(<div style={{flex:1,overflowY:"auto",padding:"8px 12px"}}>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-      <span style={{fontSize:16,fontWeight:900,color:"#e8e0f0"}}>📓 Notebook</span>
+      <span style={{fontSize:16,fontWeight:900,color:"#e8e0f0"}}>📓 Notes & Doodles</span>
       <div style={{display:"flex",gap:4}}>
         <button onClick={togglePreviewMode} style={btn({fontSize:11,padding:"4px 8px",color:nbPreviewMode?"#a8b4f0":"#888",background:nbPreviewMode?"rgba(102,126,234,.12)":"transparent"})}>{nbPreviewMode?"👁":"👁‍🗨"}</button>
         <button onClick={()=>setNbView("archive")} style={btn({fontSize:11,padding:"4px 8px",color:"#888"})}>🗃️ {nbData.archive.length}</button>
