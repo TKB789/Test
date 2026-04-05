@@ -6666,18 +6666,8 @@ const NotebookPanel=()=>{
   // ─── STYLES ─────────────────────────────────────────────────────
   const hs=20,hcol=hs*1.5,hrow=Math.round(hs*Math.sqrt(3)),hoff=Math.round(hrow/2);
   const NOTE_BG_COLORS=[
-    {c:"",l:"Default",preview:"rgba(255,255,255,.02)"},
-    {c:"#1a1a2e",l:"Dark Navy"},
-    {c:"#2d1b2e",l:"Dark Purple"},
-    {c:"#1b2e1b",l:"Dark Green"},
-    {c:"#2e2b1b",l:"Dark Gold"},
-    {c:"#2e1b1b",l:"Dark Red"},
-    {c:"#f5f0e0",l:"Cream"},
+    {c:"",l:"Black"},
     {c:"#ffffff",l:"White"},
-    {c:"#e8f0e8",l:"Mint"},
-    {c:"#f0e8f0",l:"Lavender"},
-    {c:"#fff8e1",l:"Butter"},
-    {c:"#e3f2fd",l:"Ice Blue"},
   ];
   const getPageBg=(page)=>page?.bgColor||"";
   const isLightBg=(bg)=>{if(!bg)return false;const h=bg.replace("#","");if(h.length!==6)return false;const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return(r*.299+g*.587+b*.114)>150;};
@@ -6913,6 +6903,7 @@ const NotebookPanel=()=>{
       {!pageDrawMode&&<div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
         <button onClick={()=>{saveAll();setPageZoom(1);setPageDrawMode(true);}} style={btn({color:"#aaa",padding:"4px 8px"})}>🎨</button>
         <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
+        <span style={{fontSize:10,opacity:.4,fontWeight:700}}>Background:</span>
         {NOTE_BG_COLORS.map(bg=>(
           <div key={bg.c||"default"} onClick={()=>{save("bgColor",bg.c);syncState();}} title={bg.l}
             style={{width:16,height:16,borderRadius:3,background:bg.c||"rgba(255,255,255,.02)",border:(page.bgColor||"")===(bg.c)?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer",boxSizing:"border-box"}}/>))}
