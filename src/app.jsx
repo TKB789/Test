@@ -6336,8 +6336,9 @@ const NotebookPanel=()=>{
   const[pixImporting,setPixImporting]=useState(false);
   const[pixImgCrop,setPixImgCrop]=useState(null);
   const[pixCropBox,setPixCropBox]=useState({x:0,y:0,w:100,h:100});
-  const pixImgModeRef=React.useRef(false);const pixImgSrcRef=React.useRef(null);
-  const _pixImgConvert=(imgSrc,useFullColor,crop)=>{
+  const pixImgModeRef=React.useRef(0);const pixImgSrcRef=React.useRef(null);
+  // paletteLimit: 0=full DMC palette (~438), 8/16/36=dynamic top-N from DMC
+  const _pixImgConvert=(imgSrc,paletteLimit,crop)=>{
     setPixImporting(true);
     const img=new Image();
     img.onerror=()=>{alert("Failed to load image");setPixImporting(false);setPixImgCrop(null);};
@@ -6351,23 +6352,22 @@ const NotebookPanel=()=>{
         if(ir>gr){const nw=img.height*gr;sx=(img.width-nw)/2;sw=nw;}else{const nh=img.width/gr;sy=(img.height-nh)/2;sh=nh;}}
       tctx.drawImage(img,sx,sy,sw,sh,0,0,dims.c,dims.r);
       const data=tctx.getImageData(0,0,dims.c,dims.r).data;
-      const rgbToHex=(r,g,b)=>"#"+[r,g,b].map(v=>v.toString(16).padStart(2,"0")).join("");
       const newPixels={};
-      if(useFullColor){for(let row=0;row<dims.r;row++)for(let col=0;col<dims.c;col++){const idx=(row*dims.c+col)*4;const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];if(a<30)continue;newPixels[`${row}-${col}`]=rgbToHex(r,g,b);}
+      const htr=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+      const fullPal=PIXEL_PALETTE.map(p=>p.c);const fullRgb=fullPal.map(htr);
+      const nearFull=(r,g,b)=>{let bi=0,bd=Infinity;fullRgb.forEach(([pr,pg,pb],i)=>{const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bd){bd=d;bi=i;}});return bi;};
+      if(paletteLimit===0){
+        // Full DMC: map every pixel to nearest DMC color from all 438
+        for(let row=0;row<dims.r;row++)for(let col=0;col<dims.c;col++){const idx=(row*dims.c+col)*4;const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];if(a<30)continue;
+          newPixels[`${row}-${col}`]=fullPal[nearFull(r,g,b)];}
       }else{
-        // Dynamic 36-color selection: find best 36 DMC threads for THIS image
-        const htr=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
-        const fullPal=PIXEL_PALETTE.map(p=>p.c);const fullRgb=fullPal.map(htr);
-        const nearFull=(r,g,b)=>{let bi=0,bd=Infinity;fullRgb.forEach(([pr,pg,pb],i)=>{const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bd){bd=d;bi=i;}});return bi;};
-        // Pass 1: tally which DMC colors the image needs most
+        // Dynamic N-color: find best N DMC threads for this image
         const votes=new Map();
         for(let row=0;row<dims.r;row++)for(let col=0;col<dims.c;col++){const idx=(row*dims.c+col)*4;const a=data[idx+3];if(a<30)continue;
           const bi=nearFull(data[idx],data[idx+1],data[idx+2]);votes.set(bi,(votes.get(bi)||0)+1);}
-        // Pick top 36 most-voted DMC colors
-        const top36=[...votes.entries()].sort((a,b)=>b[1]-a[1]).slice(0,36).map(e=>e[0]);
-        const subPal=top36.map(i=>fullPal[i]);const subRgb=top36.map(i=>fullRgb[i]);
+        const topN=[...votes.entries()].sort((a,b)=>b[1]-a[1]).slice(0,paletteLimit).map(e=>e[0]);
+        const subPal=topN.map(i=>fullPal[i]);const subRgb=topN.map(i=>fullRgb[i]);
         const nearSub=(r,g,b)=>{let bi=0,bd=Infinity;subRgb.forEach(([pr,pg,pb],i)=>{const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bd){bd=d;bi=i;}});return subPal[bi];};
-        // Pass 2: map every pixel to the nearest in top-36 subset
         for(let row=0;row<dims.r;row++)for(let col=0;col<dims.c;col++){const idx=(row*dims.c+col)*4;const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];if(a<30)continue;newPixels[`${row}-${col}`]=nearSub(r,g,b);}}
       const d=readNb();const pi=pageIdxRef.current;
       if(d.pages?.[pi]){d.pages[pi].pixels=newPixels;
@@ -6380,9 +6380,9 @@ const NotebookPanel=()=>{
   // All imports go through crop UI
   const pixFileInputRef=React.useRef(null);
   const pixImportCallbackRef=React.useRef(null);
-  const importImage=(fullColor)=>{
+  const importImage=(paletteLimit)=>{
     pixImportCallbackRef.current=(file)=>{
-      pixImgModeRef.current=fullColor;
+      pixImgModeRef.current=paletteLimit;
       const reader=new FileReader();reader.onload=(ev)=>{
         pixImgSrcRef.current=ev.target.result;
         // Initialize crop box matching grid aspect ratio, centered
@@ -6480,12 +6480,12 @@ const NotebookPanel=()=>{
       pixPaintedCells.current=new Set();
       const cell=cellFromTouchFn(t);
       if(cell){pixLastCell.current=cell;pixStartPos.current=cell;}
-      e.preventDefault();
       if(!e.touches){
-        // Mouse: paint immediately (no pinch concern)
+        // Mouse: preventDefault and paint immediately
+        e.preventDefault();
         if(cell)paintCellFn(cell.row,cell.col);
       } else {
-        // Touch: delay paint 80ms to see if second finger arrives (pinch zoom)
+        // Touch: DON'T preventDefault yet — if second finger arrives, browser handles pan
         pixPendingStart.current=setTimeout(()=>{
           pixPendingStart.current=null;
           if(pixIsPainting.current&&!pixCancelled.current&&cell){
@@ -6686,10 +6686,14 @@ const NotebookPanel=()=>{
         <span style={{fontSize:10,opacity:.4,minWidth:28,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
         <button onClick={()=>setPageZoom(z=>Math.min(6,z+0.2))} style={btn({padding:"3px 7px",fontSize:11})}>+</button>
         <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
-        <button onClick={()=>importImage(false)} disabled={pixImporting}
-          style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:10,padding:"3px 7px"})}>{pixImporting?"...":"📷 36-Color"}</button>
-        <button onClick={()=>importImage(true)} disabled={pixImporting}
-          style={btn({background:"rgba(240,147,251,.1)",border:"1px solid rgba(240,147,251,.2)",color:"#f093fb",fontSize:10,padding:"3px 7px"})}>{pixImporting?"...":"📷 Full"}</button>
+        <button onClick={()=>importImage(8)} disabled={pixImporting}
+          style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{pixImporting?"...":"📷8"}</button>
+        <button onClick={()=>importImage(16)} disabled={pixImporting}
+          style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{pixImporting?"...":"📷16"}</button>
+        <button onClick={()=>importImage(36)} disabled={pixImporting}
+          style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{pixImporting?"...":"📷36"}</button>
+        <button onClick={()=>importImage(0)} disabled={pixImporting}
+          style={btn({background:"rgba(240,147,251,.1)",border:"1px solid rgba(240,147,251,.2)",color:"#f093fb",fontSize:9,padding:"3px 6px"})}>{pixImporting?"...":"📷All"}</button>
         <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
         <button onClick={()=>{setShowPixNumbers(v=>{const nv=!v;setTimeout(drawPixelGrid,10);return nv;});}} style={btn(showPixNumbers?{background:"rgba(254,202,87,.12)",border:"1px solid rgba(254,202,87,.4)",color:"#feca57",fontSize:10,padding:"3px 7px"}:{fontSize:10,padding:"3px 7px",color:"#888"})}># Nums</button>
         <span style={{fontSize:10,opacity:.3,fontWeight:700}}>Grid:</span>
