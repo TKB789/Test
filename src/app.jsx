@@ -5995,6 +5995,17 @@ const NotebookPanel=()=>{
   const[vecShowPicker,setVecShowPicker]=useState(false);
   const[vecPaletteSearch,setVecPaletteSearch]=useState("");
   const vecFileRef=React.useRef(null);
+  const[vecCropImg,setVecCropImg]=useState(null);
+  const[vecCropBox,setVecCropBox]=useState({x:0,y:0,w:100,h:100});
+  const vecPendingLimit=React.useRef(0);
+  const[vecDrawMode,setVecDrawMode]=useState(false);
+  const[vecGrid,setVecGrid]=useState(0); // 0=off, 5,10,20 = grid divisions
+  const vecDrawCanvasRef=React.useRef(null);
+  const vecDrawDataRef=React.useRef(null);
+  const vecIsDrawing=React.useRef(false);
+  const[vecDrawColor,setVecDrawColor]=useState("#000000");
+  const[vecDrawSize,setVecDrawSize]=useState(3);
+  const[vecDrawEraser,setVecDrawEraser]=useState(false);
   const[saved,setSaved]=useState(false);
   const[renaming,setRenaming]=useState(false);
   const[renameVal,setRenameVal]=useState("");
@@ -6990,30 +7001,38 @@ const NotebookPanel=()=>{
       }catch(err){alert("Error: "+err.message);callback(null);}
     };img.src=imgSrc;
   };
-  const vecSvgRef=React.useRef(""); // keep full SVG in memory only (not localStorage)
+  const vecSvgRef=React.useRef("");
   const vecConvert=(paletteLimit)=>{
+    vecPendingLimit.current=paletteLimit;
     vecFileRef.current?.click();
-    const handler=(e)=>{
-      const file=e.target.files?.[0];if(!file)return;e.target.value="";
-      setVecImporting(true);
-      const reader=new FileReader();reader.onload=(ev)=>{
-        traceImageToSvg(ev.target.result,paletteLimit,(result)=>{
-          setVecImporting(false);
-          if(!result)return;
-          vecSvgRef.current=result.svg;
-          const d=readNb();const pi=pageIdxRef.current;
-          if(d.pages?.[pi]){
-            d.pages[pi].vectorPng=result.pngUrl||"";
-            d.pages[pi].vectorColors=result.colors;
-            delete d.pages[pi].vectorSvg;
-            try{writeNb(d);setNbData({...d});}catch(err){alert("Save failed — image may be too large. Try fewer colors.");}
-          }
-        });
-      };reader.readAsDataURL(file);
-    };
     const input=vecFileRef.current;
-    if(input){input.onchange=handler;}
+    if(input){input.onchange=(e)=>{
+      const file=e.target.files?.[0];if(!file)return;e.target.value="";
+      const reader=new FileReader();reader.onload=(ev)=>{
+        setVecCropBox({x:0,y:0,w:100,h:100});setVecCropImg(ev.target.result);
+      };reader.readAsDataURL(file);
+    };}
   };
+  const vecConfirmCrop=()=>{
+    if(!vecCropImg)return;setVecImporting(true);
+    const src=vecCropImg;setVecCropImg(null);
+    const ci2=new Image();ci2.onload=()=>{
+      const bx=Math.round(ci2.width*vecCropBox.x/100),by=Math.round(ci2.height*vecCropBox.y/100);
+      const bw=Math.max(1,Math.round(ci2.width*vecCropBox.w/100)),bh=Math.max(1,Math.round(ci2.height*vecCropBox.h/100));
+      const cc=document.createElement("canvas");cc.width=bw;cc.height=bh;
+      cc.getContext("2d").drawImage(ci2,bx,by,bw,bh,0,0,bw,bh);
+      traceImageToSvg(cc.toDataURL("image/png"),vecPendingLimit.current,(result)=>{
+        setVecImporting(false);if(!result)return;
+        vecSvgRef.current=result.svg;
+        const d=readNb();const pi=pageIdxRef.current;
+        if(d.pages?.[pi]){d.pages[pi].vectorPng=result.pngUrl||"";d.pages[pi].vectorColors=result.colors;d.pages[pi].vecDrawData=null;delete d.pages[pi].vectorSvg;
+          try{writeNb(d);setNbData({...d});}catch(err){alert("Save failed — try fewer colors.");}}
+      });
+    };ci2.src=src;
+  };
+  // Save vector draw overlay
+  const saveVecDraw=()=>{const c=vecDrawCanvasRef.current;if(!c)return;const d=readNb();const pi=pageIdxRef.current;
+    if(d.pages?.[pi]){d.pages[pi].vecDrawData=c.toDataURL("image/png");try{writeNb(d);}catch{}}};
 
   // ═══ VECTOR PAGE ═══
   if(nbView==="page"&&nbData.pages[nbPageIdx]?.type==="vector"){
@@ -7109,13 +7128,78 @@ const NotebookPanel=()=>{
           </div>
         </div>}
       </div>}
-      {/* Image display */}
+      {/* Crop UI */}
+      {vecCropImg&&<div style={{position:"absolute",inset:0,zIndex:100,background:"rgba(0,0,0,.85)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:16}}>
+        <div style={{fontSize:16,fontWeight:800,color:"#e8e0f0",marginBottom:4}}>Drag to select area</div>
+        <div style={{fontSize:12,color:"#888",marginBottom:8}}>Pinch or use slider to resize</div>
+        <div style={{position:"relative",width:280,maxHeight:280,marginBottom:8}} onPointerMove={(e)=>{if(e.buttons){const r=e.currentTarget.getBoundingClientRect();const px=((e.clientX-r.left)/r.width)*100;const py=((e.clientY-r.top)/r.height)*100;setVecCropBox(b=>({...b,x:Math.max(0,Math.min(100-b.w,px-b.w/2)),y:Math.max(0,Math.min(100-b.h,py-b.h/2))}));}}}>
+          <img src={vecCropImg} style={{width:"100%",height:"auto",borderRadius:8,display:"block"}}/>
+          <div style={{position:"absolute",top:`${vecCropBox.y}%`,left:`${vecCropBox.x}%`,width:`${vecCropBox.w}%`,height:`${vecCropBox.h}%`,border:"2px solid #feca57",boxSizing:"border-box",borderRadius:4}}/>
+          <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+            <div style={{position:"absolute",top:0,left:0,right:0,height:`${vecCropBox.y}%`,background:"rgba(0,0,0,.5)"}}/>
+            <div style={{position:"absolute",bottom:0,left:0,right:0,height:`${100-vecCropBox.y-vecCropBox.h}%`,background:"rgba(0,0,0,.5)"}}/>
+            <div style={{position:"absolute",top:`${vecCropBox.y}%`,left:0,width:`${vecCropBox.x}%`,height:`${vecCropBox.h}%`,background:"rgba(0,0,0,.5)"}}/>
+            <div style={{position:"absolute",top:`${vecCropBox.y}%`,right:0,width:`${100-vecCropBox.x-vecCropBox.w}%`,height:`${vecCropBox.h}%`,background:"rgba(0,0,0,.5)"}}/>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,width:260}}>
+          <span style={{fontSize:11,color:"#feca57",fontWeight:700,flexShrink:0}}>Size</span>
+          <input type="range" min="20" max="100" value={vecCropBox.w} onChange={(e)=>{const nw=Number(e.target.value);setVecCropBox(p=>{const nh=Math.min(100,nw);return{...p,w:nw,h:nh,x:Math.min(p.x,100-nw),y:Math.min(p.y,100-nh)};});}}
+            style={{flex:1,accentColor:"#feca57",filter:"contrast(1.3)"}}/>
+          <span style={{fontSize:12,color:"#feca57",fontWeight:800,minWidth:36,textAlign:"right"}}>{Math.round(vecCropBox.w)}%</span>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={vecConfirmCrop} style={{padding:"10px 24px",borderRadius:10,background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",fontSize:15,fontWeight:700,cursor:"pointer"}}>Convert</button>
+          <button onClick={()=>setVecCropImg(null)} style={{padding:"10px 24px",borderRadius:10,background:"rgba(255,255,255,.06)",color:"#aaa",border:"1px solid rgba(255,255,255,.1)",fontSize:15,fontWeight:700,cursor:"pointer"}}>Cancel</button>
+        </div>
+      </div>}
+      {/* Draw toolbar for vector overlay */}
+      {vecDrawMode&&hasVecContent&&<div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
+        <button onClick={()=>setVecDrawMode(false)} style={btn({background:"rgba(102,126,234,.15)",border:"1px solid rgba(102,126,234,.3)",color:"#a8b4f0",padding:"3px 8px",fontSize:10})}>Done</button>
+        <button onClick={()=>setVecDrawEraser(e=>!e)} style={btn(vecDrawEraser?{background:"rgba(245,87,108,.2)",border:"1px solid rgba(245,87,108,.4)",color:"#f5576c",padding:"3px 8px",fontSize:10}:{padding:"3px 8px",fontSize:10,color:"#888"})}>{vecDrawEraser?"🧹":"✏️"}</button>
+        {[2,4,6,10].map(s=><div key={s} onClick={()=>setVecDrawSize(s)} style={{width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:6,background:vecDrawSize===s?"rgba(255,255,255,.12)":"transparent",border:vecDrawSize===s?"1px solid "+vecDrawColor:"1px solid transparent",cursor:"pointer"}}><div style={{width:Math.max(s,2),height:Math.max(s,2),borderRadius:"50%",background:vecDrawEraser?"rgba(245,87,108,.7)":vecDrawColor}}/></div>)}
+        <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
+        {["#000000","#ffffff","#C72B3B","#13477D","#056517","#FF8313"].map(c=><div key={c} onClick={()=>{setVecDrawColor(c);setVecDrawEraser(false);}} style={{width:20,height:20,borderRadius:4,background:c,border:vecDrawColor===c&&!vecDrawEraser?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer"}}/>)}
+      </div>}
+      {/* Grid + draw toggle row */}
+      {hasVecContent&&!vecDrawMode&&<div style={{display:"flex",alignItems:"center",gap:3,padding:"0 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
+        <button onClick={()=>setVecDrawMode(true)} style={btn({padding:"3px 8px",fontSize:10,color:"#888"})}>🎨 Draw</button>
+        <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
+        <span style={{fontSize:10,opacity:.4,fontWeight:700}}>Grid:</span>
+        {[{v:0,l:"Off"},{v:5,l:"5"},{v:10,l:"10"},{v:20,l:"20"}].map(g=>(
+          <button key={g.v} onClick={()=>setVecGrid(g.v)} style={{padding:"2px 5px",borderRadius:6,fontSize:10,fontWeight:700,border:vecGrid===g.v?"1px solid rgba(254,202,87,.5)":"1px solid rgba(255,255,255,.06)",background:vecGrid===g.v?"rgba(254,202,87,.12)":"transparent",color:vecGrid===g.v?"#feca57":"#666",cursor:"pointer"}}>{g.l}</button>))}
+      </div>}
+      {/* Image display with grid overlay and draw canvas */}
       <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:12}}>
-        {vecPng?<img src={vecPng} style={{transform:`scale(${pageZoom})`,transformOrigin:"top center",maxWidth:"100%",height:"auto",imageRendering:"auto"}}/>
-        :vecSvg?<div style={{transform:`scale(${pageZoom})`,transformOrigin:"top center"}} dangerouslySetInnerHTML={{__html:vecSvg}}/>
+        {hasVecContent?<div style={{position:"relative",transform:`scale(${pageZoom})`,transformOrigin:"top center",display:"inline-block"}}>
+          <img src={vecPng} style={{maxWidth:"100%",height:"auto",display:"block",imageRendering:"auto"}}/>
+          {/* Grid overlay */}
+          {vecGrid>0&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
+            {Array.from({length:vecGrid-1},(_,i)=><line key={"v"+i} x1={`${(i+1)*100/vecGrid}%`} y1="0" x2={`${(i+1)*100/vecGrid}%`} y2="100%" stroke="rgba(255,255,255,.4)" strokeWidth="0.5"/>)}
+            {Array.from({length:vecGrid-1},(_,i)=><line key={"h"+i} x1="0" y1={`${(i+1)*100/vecGrid}%`} x2="100%" y2={`${(i+1)*100/vecGrid}%`} stroke="rgba(255,255,255,.4)" strokeWidth="0.5"/>)}
+          </svg>}
+          {/* Draw overlay canvas */}
+          {vecDrawMode&&<canvas ref={(el)=>{if(el&&!vecDrawCanvasRef.current){vecDrawCanvasRef.current=el;
+            // Load existing drawing
+            const d=readNb();const dd=d.pages?.[pageIdxRef.current]?.vecDrawData;
+            if(dd){const img2=new Image();img2.onload=()=>{el.getContext("2d").drawImage(img2,0,0);};img2.src=dd;}
+            // Touch handlers
+            const getXY=(e)=>{const t=e.touches?e.touches[0]:e;const r=el.getBoundingClientRect();return{x:(t.clientX-r.left)*el.width/r.width,y:(t.clientY-r.top)*el.height/r.height};};
+            el.addEventListener("pointerdown",(e)=>{e.preventDefault();vecIsDrawing.current=true;const ctx=el.getContext("2d");const p=getXY(e);
+              if(vecDrawEraser){ctx.globalCompositeOperation="destination-out";ctx.lineWidth=20;}
+              else{ctx.globalCompositeOperation="source-over";ctx.strokeStyle=vecDrawColor;ctx.lineWidth=vecDrawSize;}
+              ctx.lineCap="round";ctx.beginPath();ctx.moveTo(p.x,p.y);
+              ctx.beginPath();ctx.arc(p.x,p.y,vecDrawEraser?10:vecDrawSize/2,0,Math.PI*2);ctx.fillStyle=vecDrawEraser?"rgba(0,0,0,1)":vecDrawColor;ctx.fill();ctx.beginPath();ctx.moveTo(p.x,p.y);});
+            el.addEventListener("pointermove",(e)=>{if(!vecIsDrawing.current)return;e.preventDefault();const ctx=el.getContext("2d");const p=getXY(e);ctx.lineTo(p.x,p.y);ctx.stroke();});
+            el.addEventListener("pointerup",()=>{vecIsDrawing.current=false;el.getContext("2d").globalCompositeOperation="source-over";saveVecDraw();});
+            el.addEventListener("pointerleave",()=>{vecIsDrawing.current=false;saveVecDraw();});
+          }}} width={800} height={800} style={{position:"absolute",inset:0,width:"100%",height:"100%",touchAction:"none",cursor:"crosshair"}}/>}
+          {/* Show saved draw overlay when not in draw mode */}
+          {!vecDrawMode&&page.vecDrawData&&<img src={page.vecDrawData} style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}/>}
+        </div>
         :<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flex:1,opacity:.3}}>
           <div style={{fontSize:48,marginBottom:12}}>✏️</div>
-          <div style={{fontSize:14,fontWeight:700}}>Upload an image to convert to vector art</div>
+          <div style={{fontSize:14,fontWeight:700}}>Upload an image to convert</div>
           <div style={{fontSize:12,marginTop:4}}>Choose a color count above and select an image</div>
         </div>}
       </div>
