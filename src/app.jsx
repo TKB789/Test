@@ -6995,7 +6995,7 @@ const NotebookPanel=()=>{
           paths+=`<path d="${d}" fill="${fullPal[ci]}"/>`;
         });
       });
-      const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w*2}" height="${h*2}" style="background:#fff">${paths}</svg>`;
+      const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w*2}" height="${h*2}" preserveAspectRatio="none">${paths}</svg>`;
       const colorInfo=topN.map(([ci,count])=>({color:fullPal[ci],dmc:PIXEL_PALETTE[ci],count}));
       callback({svg,width:w,height:h,colors:colorInfo});
       }catch(err){alert("Error: "+err.message);callback(null);}
@@ -7101,25 +7101,24 @@ const NotebookPanel=()=>{
         <button onClick={archiveCurrentPage} style={btn({color:"#888",padding:"3px 7px",fontSize:10})}>🗃️</button>
         <button onClick={deleteCurrentPage} style={btn({color:"#888",padding:"3px 7px",fontSize:10})}>🗑️</button>
       </div>
-      {/* Palette picker */}
+      {/* Palette picker + thread list — hidden until expanded */}
       {vecShowPicker&&<div style={{padding:"4px 10px 6px",flexShrink:0}}>
         <input value={vecPaletteSearch} onChange={e=>setVecPaletteSearch(e.target.value)} placeholder="Search DMC # or color name..." style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid rgba(255,255,255,.12)",background:"rgba(255,255,255,.06)",color:"#e8e0f0",fontSize:11,outline:"none",marginBottom:4,boxSizing:"border-box"}}/>
         <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gap:2,maxHeight:150,overflowY:"auto",overflowX:"hidden"}}>
           {(vecPaletteSearch.trim()?PIXEL_PALETTE.filter(p=>{const q=vecPaletteSearch.toLowerCase();return p.n.toLowerCase().includes(q)||p.nm.toLowerCase().includes(q);}):PIXEL_PALETTE).map(p=>(<div key={p.n+p.c} title={`DMC ${p.n} — ${p.nm}`} style={{aspectRatio:"1",borderRadius:3,background:p.c,border:"1px solid rgba(255,255,255,.12)",minWidth:0}}/>))}
         </div>
-      </div>}
-      {/* Thread list */}
-      {vecColors.length>0&&<div style={{padding:"2px 10px 6px",flexShrink:0}}>
-        <div style={{fontSize:10,fontWeight:700,color:"rgba(232,224,240,.4)",marginBottom:3}}>🧵 Thread List ({vecColors.length} colors)</div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:3,maxHeight:100,overflowY:"auto"}}>
-          {vecColors.map((c,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:4,background:"rgba(255,255,255,.04)",borderRadius:5,padding:"2px 6px"}}>
-            <div style={{width:12,height:12,borderRadius:2,background:c.color,border:"1px solid rgba(255,255,255,.15)",flexShrink:0}}/>
-            <span style={{fontSize:9,color:"#feca57",fontWeight:700}}>#{i+1}</span>
-            <span style={{fontSize:9,color:"#e8e0f0",fontWeight:700}}>DMC {c.dmc?.n||"?"}</span>
-            <span style={{fontSize:9,color:"rgba(232,224,240,.4)"}}>{c.dmc?.nm||""}</span>
-            <span style={{fontSize:8,color:"rgba(232,224,240,.3)"}}>({c.count}px)</span>
-          </div>)}
-        </div>
+        {vecColors.length>0&&<div style={{marginTop:6}}>
+          <div style={{fontSize:10,fontWeight:700,color:"rgba(232,224,240,.4)",marginBottom:3}}>🧵 Thread List ({vecColors.length} colors)</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:3,maxHeight:100,overflowY:"auto"}}>
+            {vecColors.map((c,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:4,background:"rgba(255,255,255,.04)",borderRadius:5,padding:"2px 6px"}}>
+              <div style={{width:12,height:12,borderRadius:2,background:c.color,border:"1px solid rgba(255,255,255,.15)",flexShrink:0}}/>
+              <span style={{fontSize:9,color:"#feca57",fontWeight:700}}>#{i+1}</span>
+              <span style={{fontSize:9,color:"#e8e0f0",fontWeight:700}}>DMC {c.dmc?.n||"?"}</span>
+              <span style={{fontSize:9,color:"rgba(232,224,240,.4)"}}>{c.dmc?.nm||""}</span>
+              <span style={{fontSize:8,color:"rgba(232,224,240,.3)"}}>({c.count}px)</span>
+            </div>)}
+          </div>
+        </div>}
       </div>}
       {/* Image display */}
       <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:12}}>
@@ -7312,7 +7311,7 @@ const NotebookPanel=()=>{
         </div>
         {isExpanded&&<div onClick={openPage} style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,.06)",cursor:"pointer"}}>
           {/* Preview — combined text + drawing overlay, matching actual note layout */}
-          {p.type!=="pixel"&&(p.content||p.drawData)?<div style={{position:"relative",marginBottom:8,borderRadius:6,border:"1px solid rgba(255,255,255,.06)",background:"rgba(255,255,255,.02)",overflow:"hidden",aspectRatio:"500/300"}}>
+          {p.type!=="pixel"&&p.type!=="vector"&&(p.content||p.drawData)?<div style={{position:"relative",marginBottom:8,borderRadius:6,border:"1px solid rgba(255,255,255,.06)",background:"rgba(255,255,255,.02)",overflow:"hidden",aspectRatio:"500/300"}}>
             {/* Text layer */}
             {p.content&&<div style={{position:"absolute",inset:0,fontSize:11,color:"rgba(232,224,240,.5)",lineHeight:1.5,padding:"8px 10px",whiteSpace:"pre-wrap",wordBreak:"break-word",overflow:"hidden"}}>{p.content.slice(0,400)}</div>}
             {/* Drawing layer on top */}
@@ -7320,7 +7319,11 @@ const NotebookPanel=()=>{
             {/* Fade at bottom */}
             <div style={{position:"absolute",bottom:0,left:0,right:0,height:24,background:"linear-gradient(transparent,rgba(30,25,50,.9))"}}/>
           </div>:null}
-          {p.type!=="pixel"&&!p.content&&!p.drawData&&<div style={{fontSize:12,opacity:.25,marginBottom:8,fontStyle:"italic"}}>Empty page</div>}
+          {p.type!=="pixel"&&p.type!=="vector"&&!p.content&&!p.drawData&&<div style={{fontSize:12,opacity:.25,marginBottom:8,fontStyle:"italic"}}>Empty page</div>}
+          {p.type==="vector"&&(p.vectorPng||p.vectorSvg)?<div style={{marginBottom:8}}>
+            <img src={p.vectorPng||""} style={{width:"100%",maxHeight:160,objectFit:"contain",borderRadius:6,border:"1px solid rgba(255,255,255,.06)"}}/>
+            {p.vectorColors&&<div style={{fontSize:10,opacity:.35,marginTop:4}}>{p.vectorColors.length} colors</div>}
+          </div>:p.type==="vector"?<div style={{fontSize:12,opacity:.25,marginBottom:8,fontStyle:"italic"}}>No image converted yet</div>:null}
           {p.type==="pixel"&&<div style={{marginBottom:8}}><div style={{fontSize:12,opacity:.35,marginBottom:4}}>{Object.keys(p.pixels||{}).length} pixels · {p.pixelSize||"32x32"}</div>
             {Object.keys(p.pixels||{}).length>0&&(()=>{const dims=PIXEL_SIZES.find(s=>s.id===(p.pixelSize||"32x32"))||(()=>{const m=(p.pixelSize||"").match(/^(\d+)x(\d+)$/);return m?{c:+m[1],r:+m[2]}:{c:32,r:32};})();
               const ps=Math.max(1,Math.floor(200/Math.max(dims.c,dims.r)));
