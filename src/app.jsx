@@ -7033,11 +7033,14 @@ const NotebookPanel=()=>{
           {nbPreviewMode&&<span style={{fontSize:14,opacity:.3,transition:"transform .2s",transform:isExpanded?"rotate(90deg)":"none"}}>▶</span>}
         </div>
         {isExpanded&&<div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,.06)"}}>
-          {/* Preview — combined text + drawing overlay, just like the actual note */}
-          {p.type!=="pixel"&&(p.content||p.drawData)?<div style={{position:"relative",marginBottom:8,maxHeight:120,overflow:"hidden",borderRadius:6,border:"1px solid rgba(255,255,255,.06)",background:"rgba(255,255,255,.02)"}}>
-            {p.content&&<div style={{fontSize:12,color:"rgba(232,224,240,.5)",lineHeight:1.5,padding:"8px 10px",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{p.content.slice(0,300)}{p.content.length>300?"…":""}</div>}
-            {p.drawData&&<img src={p.drawData} style={{position:p.content?"absolute":"relative",top:0,left:0,width:"100%",height:p.content?"100%":"auto",maxHeight:120,objectFit:p.content?"cover":"contain",opacity:.7,pointerEvents:"none"}}/>}
-            {(p.content&&p.content.length>200)&&<div style={{position:"absolute",bottom:0,left:0,right:0,height:30,background:"linear-gradient(transparent,rgba(30,25,50,.9))"}}/>}
+          {/* Preview — combined text + drawing overlay, matching actual note layout */}
+          {p.type!=="pixel"&&(p.content||p.drawData)?<div style={{position:"relative",marginBottom:8,borderRadius:6,border:"1px solid rgba(255,255,255,.06)",background:"rgba(255,255,255,.02)",overflow:"hidden",aspectRatio:"500/300"}}>
+            {/* Text layer */}
+            {p.content&&<div style={{position:"absolute",inset:0,fontSize:11,color:"rgba(232,224,240,.5)",lineHeight:1.5,padding:"8px 10px",whiteSpace:"pre-wrap",wordBreak:"break-word",overflow:"hidden"}}>{p.content.slice(0,400)}</div>}
+            {/* Drawing layer on top */}
+            {p.drawData&&<img src={p.drawData} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",objectFit:"fill",opacity:.8,pointerEvents:"none"}}/>}
+            {/* Fade at bottom */}
+            <div style={{position:"absolute",bottom:0,left:0,right:0,height:24,background:"linear-gradient(transparent,rgba(30,25,50,.9))"}}/>
           </div>:null}
           {p.type!=="pixel"&&!p.content&&!p.drawData&&<div style={{fontSize:12,opacity:.25,marginBottom:8,fontStyle:"italic"}}>Empty page</div>}
           {p.type==="pixel"&&<div style={{marginBottom:8}}><div style={{fontSize:12,opacity:.35,marginBottom:4}}>{Object.keys(p.pixels||{}).length} pixels · {p.pixelSize||"32x32"}</div>
