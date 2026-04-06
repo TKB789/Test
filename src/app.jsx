@@ -6016,7 +6016,11 @@ const NotebookPanel=()=>{
   // Poly art state
   const[polyImporting,setPolyImporting]=useState(false);
   const polyFileRef=React.useRef(null);
-  const[polyDensity,setPolyDensity]=useState(500); // {type:"move"|"br"|"bl"|"tr"|"tl", startX, startY, startBox}
+  const[polyDensity,setPolyDensity]=useState(500);
+  const[polyCropImg,setPolyCropImg]=useState(null);
+  const[polyCropBox,setPolyCropBox]=useState({x:0,y:0,w:100,h:100});
+  const polyPendingColors=React.useRef(0);
+  const polyCropDrag=React.useRef(null); // {type:"move"|"br"|"bl"|"tr"|"tl", startX, startY, startBox}
   const[saved,setSaved]=useState(false);
   const[renaming,setRenaming]=useState(false);
   const[renameVal,setRenameVal]=useState("");
@@ -7376,20 +7380,31 @@ const NotebookPanel=()=>{
     };img.src=imgSrc;
   };
   const polyConvert=(colorCount)=>{
+    polyPendingColors.current=colorCount;
     polyFileRef.current?.click();
     const input=polyFileRef.current;
     if(input){input.onchange=(e)=>{
       const file=e.target.files?.[0];if(!file)return;e.target.value="";
-      setPolyImporting(true);
       const reader=new FileReader();reader.onload=(ev)=>{
-        generatePolyArt(ev.target.result,polyDensity,colorCount,(result)=>{
-          setPolyImporting(false);if(!result)return;
-          const d=readNb();const pi=pageIdxRef.current;
-          if(d.pages?.[pi]){d.pages[pi].polyPng=result.pngUrl;d.pages[pi].polyColors=result.colors;
-            try{writeNb(d);setNbData({...d});}catch(err){alert("Save failed — try fewer colors.");}}
-        });
+        setPolyCropBox({x:0,y:0,w:100,h:100});setPolyCropImg(ev.target.result);
       };reader.readAsDataURL(file);
     };}
+  };
+  const polyConfirmCrop=()=>{
+    if(!polyCropImg)return;setPolyImporting(true);
+    const src=polyCropImg;setPolyCropImg(null);
+    const ci2=new Image();ci2.onload=()=>{
+      const bx=Math.round(ci2.width*polyCropBox.x/100),by=Math.round(ci2.height*polyCropBox.y/100);
+      const bw=Math.max(1,Math.round(ci2.width*polyCropBox.w/100)),bh=Math.max(1,Math.round(ci2.height*polyCropBox.h/100));
+      const cc=document.createElement("canvas");cc.width=bw;cc.height=bh;
+      cc.getContext("2d").drawImage(ci2,bx,by,bw,bh,0,0,bw,bh);
+      generatePolyArt(cc.toDataURL("image/png"),polyDensity,polyPendingColors.current,(result)=>{
+        setPolyImporting(false);if(!result)return;
+        const d=readNb();const pi=pageIdxRef.current;
+        if(d.pages?.[pi]){d.pages[pi].polyPng=result.pngUrl;d.pages[pi].polyColors=result.colors;
+          try{writeNb(d);setNbData({...d});}catch(err){alert("Save failed — try fewer colors.");}}
+      });
+    };ci2.src=src;
   };
 
   // ═══ POLY ART PAGE ═══
@@ -7445,6 +7460,47 @@ const NotebookPanel=()=>{
         <div style={{fontSize:10,fontWeight:700,color:"rgba(232,224,240,.4)",marginBottom:3}}>🧵 {polyColors.length} colors</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:2}}>
           {polyColors.map((c,i)=><div key={i} title={`DMC ${c.dmc?.n} ${c.dmc?.nm}`} style={{width:18,height:18,borderRadius:3,background:c.color,border:"1px solid rgba(255,255,255,.1)"}}/>)}
+        </div>
+      </div>}
+      {/* Crop UI */}
+      {polyCropImg&&<div style={{position:"absolute",inset:0,zIndex:100,background:"rgba(0,0,0,.92)",display:"flex",flexDirection:"column",overflow:"auto"}}>
+        <div style={{padding:"12px 16px",flexShrink:0}}>
+          <div style={{fontSize:15,fontWeight:800,color:"#e8e0f0",marginBottom:2}}>Crop & Convert</div>
+          <div style={{fontSize:11,color:"#888"}}>Drag center to move · Drag corners to resize</div>
+        </div>
+        <div style={{flex:"0 0 auto",display:"flex",justifyContent:"center",padding:"0 16px"}}>
+          <div style={{position:"relative",width:"100%",maxWidth:300,touchAction:"none"}}
+            onPointerDown={(e)=>{const r=e.currentTarget.getBoundingClientRect();const px=((e.clientX-r.left)/r.width)*100;const py=((e.clientY-r.top)/r.height)*100;
+              const b=polyCropBox;const corner=8;
+              if(Math.abs(px-b.x)<corner&&Math.abs(py-b.y)<corner)polyCropDrag.current={type:"tl",sx:px,sy:py,sb:{...b}};
+              else if(Math.abs(px-(b.x+b.w))<corner&&Math.abs(py-b.y)<corner)polyCropDrag.current={type:"tr",sx:px,sy:py,sb:{...b}};
+              else if(Math.abs(px-b.x)<corner&&Math.abs(py-(b.y+b.h))<corner)polyCropDrag.current={type:"bl",sx:px,sy:py,sb:{...b}};
+              else if(Math.abs(px-(b.x+b.w))<corner&&Math.abs(py-(b.y+b.h))<corner)polyCropDrag.current={type:"br",sx:px,sy:py,sb:{...b}};
+              else polyCropDrag.current={type:"move",sx:px,sy:py,sb:{...b}};
+              e.currentTarget.setPointerCapture(e.pointerId);}}
+            onPointerMove={(e)=>{if(!polyCropDrag.current)return;const r=e.currentTarget.getBoundingClientRect();const px=((e.clientX-r.left)/r.width)*100;const py=((e.clientY-r.top)/r.height)*100;
+              const d=polyCropDrag.current;const dx=px-d.sx,dy=py-d.sy;const s=d.sb;
+              if(d.type==="move")setPolyCropBox({...s,x:Math.max(0,Math.min(100-s.w,s.x+dx)),y:Math.max(0,Math.min(100-s.h,s.y+dy))});
+              else if(d.type==="br")setPolyCropBox({...s,w:Math.max(10,Math.min(100-s.x,s.w+dx)),h:Math.max(10,Math.min(100-s.y,s.h+dy))});
+              else if(d.type==="tl"){const nw=Math.max(10,s.w-dx),nh=Math.max(10,s.h-dy);setPolyCropBox({x:s.x+s.w-nw,y:s.y+s.h-nh,w:nw,h:nh});}
+              else if(d.type==="tr"){const nw=Math.max(10,s.w+dx),nh=Math.max(10,s.h-dy);setPolyCropBox({x:s.x,y:s.y+s.h-nh,w:Math.min(100-s.x,nw),h:nh});}
+              else if(d.type==="bl"){const nw=Math.max(10,s.w-dx),nh=Math.max(10,s.h+dy);setPolyCropBox({x:s.x+s.w-nw,y:s.y,w:nw,h:Math.min(100-s.y,nh)});}}}
+            onPointerUp={()=>{polyCropDrag.current=null;}}>
+            <img src={polyCropImg} style={{width:"100%",height:"auto",borderRadius:6,display:"block",pointerEvents:"none"}}/>
+            <div style={{position:"absolute",top:`${polyCropBox.y}%`,left:`${polyCropBox.x}%`,width:`${polyCropBox.w}%`,height:`${polyCropBox.h}%`,border:"2px solid #feca57",boxSizing:"border-box",borderRadius:3,pointerEvents:"none"}}/>
+            {[["top","left"],["top","right"],["bottom","left"],["bottom","right"]].map(([v,h])=>(
+              <div key={v+h} style={{position:"absolute",[v]:v==="top"?`${polyCropBox.y}%`:`${polyCropBox.y+polyCropBox.h}%`,[h]:h==="left"?`${polyCropBox.x}%`:`${polyCropBox.x+polyCropBox.w}%`,width:20,height:20,marginLeft:-10,marginTop:-10,borderRadius:10,background:"#feca57",border:"2px solid #000",pointerEvents:"none"}}/>))}
+            <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:`${polyCropBox.y}%`,background:"rgba(0,0,0,.5)"}}/>
+              <div style={{position:"absolute",bottom:0,left:0,right:0,height:`${100-polyCropBox.y-polyCropBox.h}%`,background:"rgba(0,0,0,.5)"}}/>
+              <div style={{position:"absolute",top:`${polyCropBox.y}%`,left:0,width:`${polyCropBox.x}%`,height:`${polyCropBox.h}%`,background:"rgba(0,0,0,.5)"}}/>
+              <div style={{position:"absolute",top:`${polyCropBox.y}%`,right:0,width:`${100-polyCropBox.x-polyCropBox.w}%`,height:`${polyCropBox.h}%`,background:"rgba(0,0,0,.5)"}}/>
+            </div>
+          </div>
+        </div>
+        <div style={{padding:"10px 16px",flexShrink:0,display:"flex",gap:8,justifyContent:"center"}}>
+          <button onClick={polyConfirmCrop} style={{padding:"10px 28px",borderRadius:10,background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",fontSize:15,fontWeight:700,cursor:"pointer"}}>Convert</button>
+          <button onClick={()=>setPolyCropImg(null)} style={{padding:"10px 28px",borderRadius:10,background:"rgba(255,255,255,.06)",color:"#aaa",border:"1px solid rgba(255,255,255,.1)",fontSize:15,fontWeight:700,cursor:"pointer"}}>Cancel</button>
         </div>
       </div>}
       {/* Image display */}
