@@ -7235,11 +7235,15 @@ const NotebookPanel=()=>{
             const d=readNb();const dd=d.pages?.[pageIdxRef.current]?.vecDrawData;
             if(dd){const img2=new Image();img2.onload=()=>{el.getContext("2d").drawImage(img2,0,0);vecPushHistory();};img2.src=dd;}else{vecPushHistory();}
             const getXY=(e)=>{const r=el.getBoundingClientRect();return{x:(e.clientX-r.left)*el.width/r.width,y:(e.clientY-r.top)*el.height/r.height};};
-            let pinching=false;let lastPinchDist=0;
+            let pinching=false;let lastPinchDist=0;let lastPinchMidX=0;let lastPinchMidY=0;
+            const scrollParent=()=>{let p=el.parentElement;while(p){if(p.scrollHeight>p.clientHeight||p.scrollWidth>p.clientWidth)return p;p=p.parentElement;}return null;};
             el.addEventListener("touchstart",(e)=>{
               if(e.touches.length>=2){pinching=true;vecIsDrawing.current=false;
                 const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
-                lastPinchDist=Math.sqrt(dx*dx+dy*dy);e.preventDefault();return;}
+                lastPinchDist=Math.sqrt(dx*dx+dy*dy);
+                lastPinchMidX=(e.touches[0].clientX+e.touches[1].clientX)/2;
+                lastPinchMidY=(e.touches[0].clientY+e.touches[1].clientY)/2;
+                e.preventDefault();return;}
               if(e.touches.length===1&&!pinching){
                 e.preventDefault();const p=getXY(e.touches[0]);
                 if(vecEyedropperRef.current){
@@ -7262,8 +7266,14 @@ const NotebookPanel=()=>{
               if(e.touches.length>=2){e.preventDefault();
                 const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
                 const dist=Math.sqrt(dx*dx+dy*dy);
+                const midX=(e.touches[0].clientX+e.touches[1].clientX)/2;
+                const midY=(e.touches[0].clientY+e.touches[1].clientY)/2;
+                // Pinch zoom
                 if(lastPinchDist>0){const scale=dist/lastPinchDist;setPageZoom(z=>Math.max(0.3,Math.min(6,z*scale)));}
-                lastPinchDist=dist;return;}
+                // Two-finger pan
+                const sp=scrollParent();
+                if(sp){sp.scrollLeft-=(midX-lastPinchMidX);sp.scrollTop-=(midY-lastPinchMidY);}
+                lastPinchDist=dist;lastPinchMidX=midX;lastPinchMidY=midY;return;}
               if(!vecIsDrawing.current||pinching)return;e.preventDefault();
               const p=getXY(e.touches[0]);const ctx=el.getContext("2d");ctx.lineTo(p.x,p.y);ctx.stroke();
             },{passive:false});
