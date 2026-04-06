@@ -6006,7 +6006,11 @@ const NotebookPanel=()=>{
   const[vecDrawColor,setVecDrawColor]=useState("#000000");
   const[vecDrawSize,setVecDrawSize]=useState(3);
   const[vecDrawEraser,setVecDrawEraser]=useState(false);
-  const vecCropDrag=React.useRef(null); // {type:"move"|"br"|"bl"|"tr"|"tl", startX, startY, startBox}
+  const vecCropDrag=React.useRef(null);
+  // Poly art state
+  const[polyImporting,setPolyImporting]=useState(false);
+  const polyFileRef=React.useRef(null);
+  const[polyDensity,setPolyDensity]=useState(500); // {type:"move"|"br"|"bl"|"tr"|"tl", startX, startY, startBox}
   const[saved,setSaved]=useState(false);
   const[renaming,setRenaming]=useState(false);
   const[renameVal,setRenameVal]=useState("");
@@ -7231,8 +7235,208 @@ const NotebookPanel=()=>{
     </div>);
   }
 
+
+  // ═══ POLY ART ENGINE — Delaunay triangulation ═══
+  const generatePolyArt=(imgSrc,numPoints,colorCount,callback)=>{
+    const img=new Image();img.onerror=()=>{alert("Failed to load image");callback(null);};
+    img.onload=()=>{
+      try{
+      const maxDim=800;const scale=Math.min(1,maxDim/Math.max(img.width,img.height));
+      const w=Math.round(img.width*scale),h=Math.round(img.height*scale);
+      const tc=document.createElement("canvas");tc.width=w;tc.height=h;
+      const tctx=tc.getContext("2d");tctx.drawImage(img,0,0,w,h);
+      const data=tctx.getImageData(0,0,w,h).data;
+      // Edge detection for point placement (Sobel)
+      const gray=new Float32Array(w*h);
+      for(let i=0;i<w*h;i++)gray[i]=(data[i*4]*0.299+data[i*4+1]*0.587+data[i*4+2]*0.114)/255;
+      const edges=new Float32Array(w*h);
+      for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+        const gx=gray[(y-1)*w+x+1]-gray[(y-1)*w+x-1]+2*(gray[y*w+x+1]-gray[y*w+x-1])+gray[(y+1)*w+x+1]-gray[(y+1)*w+x-1];
+        const gy=gray[(y+1)*w+x-1]-gray[(y-1)*w+x-1]+2*(gray[(y+1)*w+x]-gray[(y-1)*w+x])+gray[(y+1)*w+x+1]-gray[(y-1)*w+x+1];
+        edges[y*w+x]=Math.sqrt(gx*gx+gy*gy);
+      }
+      // Sample points: more on edges, fewer on flat areas
+      const pts=[{x:0,y:0},{x:w,y:0},{x:0,y:h},{x:w,y:h},{x:w/2,y:0},{x:0,y:h/2},{x:w,y:h/2},{x:w/2,y:h}];
+      // Add edge points along borders
+      for(let i=1;i<8;i++){pts.push({x:w*i/8,y:0});pts.push({x:w*i/8,y:h});pts.push({x:0,y:h*i/8});pts.push({x:w,y:h*i/8});}
+      // Weighted random sampling
+      let maxEdge=0;for(let i=0;i<edges.length;i++)if(edges[i]>maxEdge)maxEdge=edges[i];
+      const threshold=maxEdge*0.15;let attempts=0;
+      while(pts.length<numPoints&&attempts<numPoints*10){
+        const x=Math.random()*w,y=Math.random()*h;
+        const ix=Math.floor(x),iy=Math.floor(y);
+        const edgeVal=ix>=0&&ix<w&&iy>=0&&iy<h?edges[iy*w+ix]:0;
+        // Higher edge = higher probability of keeping the point
+        if(Math.random()<(edgeVal/maxEdge*0.7+0.3)||edgeVal>threshold){
+          // Check minimum distance
+          let tooClose=false;const minDist=Math.max(3,Math.sqrt(w*h/numPoints)*0.4);
+          for(let j=pts.length-1;j>=Math.max(0,pts.length-50);j--){
+            const dx2=pts[j].x-x,dy2=pts[j].y-y;
+            if(dx2*dx2+dy2*dy2<minDist*minDist){tooClose=true;break;}
+          }
+          if(!tooClose)pts.push({x,y});
+        }
+        attempts++;
+      }
+      // Delaunay triangulation (Bowyer-Watson)
+      const triangulate=(points)=>{
+        const st=[{x:-w*10,y:-h*10},{x:w*20,y:-h*10},{x:w/2,y:h*20}];
+        let triangles=[{a:0,b:1,c:2}];
+        const allPts=[...st];
+        for(let i=0;i<points.length;i++){
+          const p=points[i];allPts.push(p);const pi=allPts.length-1;
+          const bad=[];
+          triangles.forEach((t,ti)=>{
+            const pa=allPts[t.a],pb=allPts[t.b],pc=allPts[t.c];
+            // Circumcircle test
+            const ax2=pa.x-p.x,ay2=pa.y-p.y,bx2=pb.x-p.x,by2=pb.y-p.y,cx2=pc.x-p.x,cy2=pc.y-p.y;
+            const det=ax2*(by2*cx2*cx2+by2*cy2*cy2-cy2*bx2*bx2-cy2*by2*by2)-ay2*(bx2*cx2*cx2+bx2*cy2*cy2-cx2*bx2*bx2-cx2*by2*by2)+(ax2*ax2+ay2*ay2)*(bx2*cy2-cx2*by2);
+            // Simpler: compute circumcircle
+            const D=2*(pa.x*(pb.y-pc.y)+pb.x*(pc.y-pa.y)+pc.x*(pa.y-pb.y));
+            if(Math.abs(D)<1e-10)return;
+            const ux=((pa.x*pa.x+pa.y*pa.y)*(pb.y-pc.y)+(pb.x*pb.x+pb.y*pb.y)*(pc.y-pa.y)+(pc.x*pc.x+pc.y*pc.y)*(pa.y-pb.y))/D;
+            const uy=((pa.x*pa.x+pa.y*pa.y)*(pc.x-pb.x)+(pb.x*pb.x+pb.y*pb.y)*(pa.x-pc.x)+(pc.x*pc.x+pc.y*pc.y)*(pb.x-pa.x))/D;
+            const r2=(pa.x-ux)*(pa.x-ux)+(pa.y-uy)*(pa.y-uy);
+            const d2=(p.x-ux)*(p.x-ux)+(p.y-uy)*(p.y-uy);
+            if(d2<r2)bad.push(ti);
+          });
+          // Find boundary polygon
+          const edgesMap=new Map();
+          bad.forEach(ti=>{const t=triangles[ti];
+            [[t.a,t.b],[t.b,t.c],[t.c,t.a]].forEach(([a,b])=>{
+              const k=Math.min(a,b)+"-"+Math.max(a,b);edgesMap.set(k,(edgesMap.get(k)||0)+1);
+            });
+          });
+          const boundary=[];
+          bad.forEach(ti=>{const t=triangles[ti];
+            [[t.a,t.b],[t.b,t.c],[t.c,t.a]].forEach(([a,b])=>{
+              const k=Math.min(a,b)+"-"+Math.max(a,b);
+              if(edgesMap.get(k)===1)boundary.push([a,b]);
+            });
+          });
+          // Remove bad triangles (reverse order)
+          bad.sort((a,b)=>b-a).forEach(ti=>triangles.splice(ti,1));
+          // Add new triangles
+          boundary.forEach(([a,b])=>triangles.push({a,b,c:pi}));
+        }
+        // Remove triangles using super-triangle vertices
+        return triangles.filter(t=>t.a>2&&t.b>2&&t.c>2).map(t=>({a:t.a-3,b:t.b-3,c:t.c-3}));
+      };
+      const tris=triangulate(pts);
+      // Color each triangle: average color of sampled pixels inside, mapped to DMC
+      const htr=hex=>[parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];
+      const fullPal=PIXEL_PALETTE.map(p=>p.c);const fullRgb=fullPal.map(htr);
+      const nearFull=(r,g,b)=>{let bi=0,bd=Infinity;fullRgb.forEach(([pr,pg,pb],i)=>{const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bd){bd=d;bi=i;}});return bi;};
+      const outCanvas=document.createElement("canvas");outCanvas.width=w;outCanvas.height=h;
+      const octx=outCanvas.getContext("2d");octx.fillStyle="#fff";octx.fillRect(0,0,w,h);
+      const votes=new Map();
+      tris.forEach(t=>{
+        const pa=pts[t.a],pb=pts[t.b],pc=pts[t.c];
+        // Sample center + a few points
+        const cx2=(pa.x+pb.x+pc.x)/3,cy2=(pa.y+pb.y+pc.y)/3;
+        let sr=0,sg=0,sb=0,sc=0;
+        [[cx2,cy2],[pa.x*.5+pb.x*.25+pc.x*.25,pa.y*.5+pb.y*.25+pc.y*.25],[pa.x*.25+pb.x*.5+pc.x*.25,pa.y*.25+pb.y*.5+pc.y*.25],[pa.x*.25+pb.x*.25+pc.x*.5,pa.y*.25+pb.y*.25+pc.y*.5]].forEach(([sx,sy])=>{
+          const ix=Math.floor(sx),iy=Math.floor(sy);
+          if(ix>=0&&ix<w&&iy>=0&&iy<h){const idx=(iy*w+ix)*4;sr+=data[idx];sg+=data[idx+1];sb+=data[idx+2];sc++;}
+        });
+        if(sc===0)return;sr/=sc;sg/=sc;sb/=sc;
+        const ci=nearFull(sr,sg,sb);votes.set(ci,(votes.get(ci)||0)+1);
+        octx.fillStyle=fullPal[ci];octx.strokeStyle=fullPal[ci];octx.lineWidth=0.5;octx.lineJoin="round";
+        octx.beginPath();octx.moveTo(pa.x,pa.y);octx.lineTo(pb.x,pb.y);octx.lineTo(pc.x,pc.y);octx.closePath();octx.fill();octx.stroke();
+      });
+      const pngUrl=outCanvas.toDataURL("image/png");
+      // Top N colors
+      const topColors=[...votes.entries()].sort((a,b)=>b[1]-a[1]).slice(0,colorCount===0?votes.size:colorCount);
+      const colorInfo=topColors.map(([ci,count])=>({color:fullPal[ci],dmc:PIXEL_PALETTE[ci],count}));
+      callback({pngUrl,width:w,height:h,colors:colorInfo});
+      }catch(err){alert("Error: "+err.message);callback(null);}
+    };img.src=imgSrc;
+  };
+  const polyConvert=(colorCount)=>{
+    polyFileRef.current?.click();
+    const input=polyFileRef.current;
+    if(input){input.onchange=(e)=>{
+      const file=e.target.files?.[0];if(!file)return;e.target.value="";
+      setPolyImporting(true);
+      const reader=new FileReader();reader.onload=(ev)=>{
+        generatePolyArt(ev.target.result,polyDensity,colorCount,(result)=>{
+          setPolyImporting(false);if(!result)return;
+          const d=readNb();const pi=pageIdxRef.current;
+          if(d.pages?.[pi]){d.pages[pi].polyPng=result.pngUrl;d.pages[pi].polyColors=result.colors;
+            try{writeNb(d);setNbData({...d});}catch(err){alert("Save failed — try fewer colors.");}}
+        });
+      };reader.readAsDataURL(file);
+    };}
+  };
+
+  // ═══ POLY ART PAGE ═══
+  if(nbView==="page"&&nbData.pages[nbPageIdx]?.type==="poly"){
+    const page=nbData.pages[nbPageIdx];
+    const hasPrev=nbPageIdx>0,hasNext=nbPageIdx<nbData.pages.length-1;
+    const polyPng=page.polyPng||"";
+    const polyColors=page.polyColors||[];
+    return(<div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <input ref={polyFileRef} type="file" accept="image/*" style={{display:"none"}}/>
+      {/* Row 1: nav */}
+      <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px 4px",flexShrink:0}}>
+        <button onClick={goToc} style={btn()}>←</button>
+        <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,minWidth:0}}>
+          <button onClick={()=>hasPrev&&goPrev()} style={{background:"none",border:"none",fontSize:16,color:hasPrev?"#a8b4f0":"#333",cursor:hasPrev?"pointer":"default",padding:"4px"}}>◀</button>
+          {renaming?<input value={renameVal} onChange={e=>setRenameVal(e.target.value)} autoFocus
+            onBlur={()=>{if(renameVal.trim()){save("title",renameVal.trim());syncState();}setRenaming(false);}}
+            onKeyDown={e=>{if(e.key==="Enter"){e.target.blur();}}}
+            style={{padding:"3px 8px",borderRadius:6,border:"1px solid rgba(102,126,234,.4)",background:"rgba(102,126,234,.1)",color:"#e8e0f0",fontSize:12,fontWeight:700,outline:"none",width:120}}/>
+          :<span onClick={startRename} style={{fontSize:11,fontWeight:800,color:"#e8e0f0",cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:120}}>{nbPageIdx+1}. {page.title||"Untitled"}</span>}
+          <button onClick={()=>hasNext&&goNext()} style={{background:"none",border:"none",fontSize:16,color:hasNext?"#a8b4f0":"#333",cursor:hasNext?"pointer":"default",padding:"4px"}}>▶</button>
+        </div>
+        <button onClick={doSave} style={btn(saved?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b"}:{color:"#aaa"})}>{saved?"Saved ✓":"Save"}</button>
+      </div>
+      {/* Row 2: convert + density */}
+      <div style={{display:"flex",alignItems:"center",gap:3,padding:"2px 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
+        <span style={{fontSize:10,opacity:.4,fontWeight:700}}>Convert:</span>
+        {[{n:8,l:"8"},{n:16,l:"16"},{n:32,l:"32"}].map(o=>(
+          <button key={o.n} onClick={()=>polyConvert(o.n)} disabled={polyImporting}
+            style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{polyImporting?"...":"📷"+o.l}</button>))}
+        <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
+        <span style={{fontSize:9,opacity:.4}}>Density:</span>
+        {[{v:200,l:"Low"},{v:500,l:"Med"},{v:1000,l:"High"},{v:2000,l:"Ultra"}].map(d=>(
+          <button key={d.v} onClick={()=>setPolyDensity(d.v)} style={{padding:"2px 5px",borderRadius:6,fontSize:9,fontWeight:700,border:polyDensity===d.v?"1px solid rgba(102,126,234,.5)":"1px solid rgba(255,255,255,.06)",background:polyDensity===d.v?"rgba(102,126,234,.15)":"transparent",color:polyDensity===d.v?"#a8b4f0":"#666",cursor:"pointer"}}>{d.l}</button>))}
+      </div>
+      {/* Row 3: actions */}
+      <div style={{display:"flex",alignItems:"center",gap:3,padding:"0 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
+        <div style={{flex:1}}/>
+        <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={btn({padding:"3px 7px",fontSize:11})}>−</button>
+        <span style={{fontSize:10,opacity:.4,minWidth:28,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
+        <button onClick={()=>setPageZoom(z=>Math.min(6,z+0.2))} style={btn({padding:"3px 7px",fontSize:11})}>+</button>
+        {polyPng&&<button onClick={()=>{
+          const legendHtml=polyColors.map((c,i)=>`<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:14px;border-radius:3px;background:${c.color};border:1px solid #ccc;display:inline-block"></span><b>#${i+1}</b> DMC ${c.dmc?.n||"?"} ${c.dmc?.nm||""}</span>`).join("");
+          const win=window.open("","_blank");
+          if(win){win.document.write(`<html><head><title>${page.title||"Poly Art"}</title><style>@media print{body{margin:0}.no-print{display:none}}body{font-family:sans-serif;margin:0;padding:12px;display:flex;flex-direction:column;align-items:center}img{max-width:100%;height:auto}</style></head><body><h3 style="margin:4px 0">${page.title||"Poly Art"}</h3><img src="${polyPng}"/><div style="margin:8px 0;font-size:12px;display:flex;flex-wrap:wrap;gap:10px">${legendHtml}</div><div class="no-print"><button onclick="window.print()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">🖨️ Print / Save PDF</button></div></body></html>`);win.document.close();}
+        }} style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>🖨 Print</button>}
+        <button onClick={archiveCurrentPage} style={btn({color:"#888",padding:"3px 7px",fontSize:10})}>🗃️</button>
+        <button onClick={deleteCurrentPage} style={btn({color:"#888",padding:"3px 7px",fontSize:10})}>🗑️</button>
+      </div>
+      {/* Thread list */}
+      {polyColors.length>0&&<div style={{padding:"2px 10px 4px",flexShrink:0}}>
+        <div style={{fontSize:10,fontWeight:700,color:"rgba(232,224,240,.4)",marginBottom:3}}>🧵 {polyColors.length} colors</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:2}}>
+          {polyColors.map((c,i)=><div key={i} title={`DMC ${c.dmc?.n} ${c.dmc?.nm}`} style={{width:18,height:18,borderRadius:3,background:c.color,border:"1px solid rgba(255,255,255,.1)"}}/>)}
+        </div>
+      </div>}
+      {/* Image display */}
+      <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:12}}>
+        {polyPng?<img src={polyPng} style={{transform:`scale(${pageZoom})`,transformOrigin:"top center",maxWidth:"100%",height:"auto"}}/>
+        :<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flex:1,opacity:.3}}>
+          <div style={{fontSize:48,marginBottom:12}}>🔷</div>
+          <div style={{fontSize:14,fontWeight:700}}>Upload an image to convert to poly art</div>
+          <div style={{fontSize:12,marginTop:4}}>Set density and color count, then select an image</div>
+        </div>}
+      </div>
+    </div>);
+  }
+
   // ═══ TEXT PAGE ═══
-  if(nbView==="page"&&nbData.pages[nbPageIdx]&&nbData.pages[nbPageIdx].type!=="pixel"&&nbData.pages[nbPageIdx].type!=="vector"){
+  if(nbView==="page"&&nbData.pages[nbPageIdx]&&nbData.pages[nbPageIdx].type!=="pixel"&&nbData.pages[nbPageIdx].type!=="vector"&&nbData.pages[nbPageIdx].type!=="poly"){
     const page=nbData.pages[nbPageIdx];const existingDraw=getDrawData();
     const hasPrev=nbPageIdx>0,hasNext=nbPageIdx<nbData.pages.length-1;
     return(<div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -7361,7 +7565,7 @@ const NotebookPanel=()=>{
     <div style={{background:"rgba(102,126,234,.06)",border:"1px solid rgba(102,126,234,.15)",borderRadius:12,padding:"10px 12px",marginBottom:10}}>
       <input value={nbNewTitle} onChange={e=>setNbNewTitle(e.target.value)} placeholder="Page title" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid rgba(255,255,255,.08)",background:"rgba(255,255,255,.04)",color:"#e8e0f0",fontSize:14,outline:"none",marginBottom:6}}/>
       <div style={{display:"flex",gap:4,marginBottom:6}}>
-        {[{id:"lined",label:"📝 Note"},{id:"pixel",label:"🟨 Pixel Art"},{id:"vector",label:"🎨 Flat Art"}].map(t=>(
+        {[{id:"lined",label:"📝 Note"},{id:"pixel",label:"🟨 Pixel Art"},{id:"vector",label:"🎨 Flat Art"},{id:"poly",label:"🔷 Poly Art"}].map(t=>(
           <button key={t.id} onClick={()=>setNbNewType(t.id)}
             style={{flex:1,padding:"7px 2px",borderRadius:8,border:nbNewType===t.id?"1px solid rgba(102,126,234,.5)":"1px solid rgba(255,255,255,.08)",
               background:nbNewType===t.id?"rgba(102,126,234,.15)":"rgba(255,255,255,.03)",color:nbNewType===t.id?"#a8b4f0":"#888",fontSize:12,fontWeight:700,cursor:"pointer"}}>{t.label}</button>))}
@@ -7404,7 +7608,7 @@ const NotebookPanel=()=>{
           <span style={{fontSize:13,fontWeight:800,color:"rgba(102,126,234,.6)",minWidth:28}}>{i+1}.</span>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:14,fontWeight:700,color:"#e8e0f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title||"Untitled"}</div>
-            <div style={{fontSize:11,opacity:.3}}>{p.type==="pixel"?"🟨 "+(p.pixelSize||"32x32"):p.type==="vector"?"🎨 Flat Art":`📝 ${p.type}`}{p.drawData?" + 🎨":""}</div></div>
+            <div style={{fontSize:11,opacity:.3}}>{p.type==="pixel"?"🟨 "+(p.pixelSize||"32x32"):p.type==="vector"?"🎨 Flat Art":p.type==="poly"?"🔷 Poly Art":`📝 ${p.type}`}{p.drawData?" + 🎨":""}</div></div>
           {nbPreviewMode&&<span style={{fontSize:14,opacity:.3,transition:"transform .2s",transform:isExpanded?"rotate(90deg)":"none"}}>▶</span>}
         </div>
         {isExpanded&&<div onClick={openPage} style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,.06)",cursor:"pointer"}}>
@@ -7422,6 +7626,9 @@ const NotebookPanel=()=>{
             <img src={p.vectorPng||""} style={{width:"100%",maxHeight:160,objectFit:"contain",borderRadius:6,border:"1px solid rgba(255,255,255,.06)"}}/>
             {p.vectorColors&&<div style={{fontSize:10,opacity:.35,marginTop:4}}>{p.vectorColors.length} colors</div>}
           </div>:p.type==="vector"?<div style={{fontSize:12,opacity:.25,marginBottom:8,fontStyle:"italic"}}>No image converted yet</div>:null}
+          {p.type==="poly"&&p.polyPng?<div style={{marginBottom:8}}>
+            <img src={p.polyPng} style={{width:"100%",maxHeight:160,objectFit:"contain",borderRadius:6,border:"1px solid rgba(255,255,255,.06)"}}/>
+          </div>:p.type==="poly"?<div style={{fontSize:12,opacity:.25,marginBottom:8,fontStyle:"italic"}}>No image converted yet</div>:null}
           {p.type==="pixel"&&<div style={{marginBottom:8}}><div style={{fontSize:12,opacity:.35,marginBottom:4}}>{Object.keys(p.pixels||{}).length} pixels · {p.pixelSize||"32x32"}</div>
             {Object.keys(p.pixels||{}).length>0&&(()=>{const dims=PIXEL_SIZES.find(s=>s.id===(p.pixelSize||"32x32"))||(()=>{const m=(p.pixelSize||"").match(/^(\d+)x(\d+)$/);return m?{c:+m[1],r:+m[2]}:{c:32,r:32};})();
               const ps=Math.max(1,Math.floor(200/Math.max(dims.c,dims.r)));
