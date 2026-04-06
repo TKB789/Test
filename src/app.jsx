@@ -1,5 +1,142 @@
 const { useState, useEffect, useMemo } = React;
 
+// ─── IndexedDB Storage Layer ─────────────────────────────────────────────
+// Replaces localStorage with IndexedDB for ~50-250MB+ storage (vs 5MB).
+// Uses a synchronous in-memory cache so existing code patterns work unchanged.
+// Writes are fire-and-forget to IndexedDB in the background.
+const ZobuddyDB = (() => {
+  const DB_NAME = "zobuddy_db";
+  const DB_VERSION = 1;
+  const STORE_NAME = "kv";
+  let _db = null;
+  const _cache = new Map(); // sync read cache
+  let _ready = false;
+
+  const openDB = () => new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    req.onsuccess = () => { _db = req.result; resolve(_db); };
+    req.onerror = () => reject(req.error);
+  });
+
+  // Load all keys from IndexedDB into memory cache
+  const loadAll = () => new Promise((resolve, reject) => {
+    if (!_db) { reject(new Error("DB not open")); return; }
+    const tx = _db.transaction(STORE_NAME, "readonly");
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.getAll();
+    const reqKeys = store.getAllKeys();
+    let keys, values;
+    reqKeys.onsuccess = () => { keys = reqKeys.result; };
+    req.onsuccess = () => { values = req.result; };
+    tx.oncomplete = () => {
+      if (keys && values) {
+        for (let i = 0; i < keys.length; i++) _cache.set(keys[i], values[i]);
+      }
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+
+  // Migrate from localStorage to IndexedDB (one-time)
+  const migrateFromLS = () => new Promise((resolve) => {
+    if (!_db || localStorage.length === 0) { resolve(); return; }
+    // Check if we already migrated
+    if (_cache.has("_idb_migrated")) { resolve(); return; }
+    const tx = _db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && !k.startsWith("zobuddy_autobackup_")) { // skip old auto-backups
+        const v = localStorage.getItem(k);
+        if (v !== null) {
+          store.put(v, k);
+          _cache.set(k, v);
+        }
+      }
+    }
+    store.put("1", "_idb_migrated");
+    _cache.set("_idb_migrated", "1");
+    tx.oncomplete = () => {
+      // Clear localStorage after successful migration
+      try {
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) keysToRemove.push(localStorage.key(i));
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+      } catch {}
+      resolve();
+    };
+    tx.onerror = () => resolve(); // continue even if migration fails
+  });
+
+  // Initialize: open DB → load cache → migrate if needed
+  const init = async () => {
+    try {
+      await openDB();
+      await loadAll();
+      await migrateFromLS();
+      _ready = true;
+    } catch (e) {
+      console.warn("IndexedDB unavailable, falling back to localStorage", e);
+      // Fallback: populate cache from localStorage
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k) _cache.set(k, localStorage.getItem(k));
+      }
+      _ready = true;
+    }
+  };
+
+  // Sync read from cache
+  const get = (key) => {
+    const v = _cache.get(key);
+    return v !== undefined ? v : null;
+  };
+
+  // Sync write to cache + async persist to IDB
+  const set = (key, value) => {
+    _cache.set(key, value);
+    if (_db) {
+      try {
+        const tx = _db.transaction(STORE_NAME, "readwrite");
+        tx.objectStore(STORE_NAME).put(value, key);
+      } catch {}
+    }
+  };
+
+  // Remove
+  const remove = (key) => {
+    _cache.delete(key);
+    if (_db) {
+      try {
+        const tx = _db.transaction(STORE_NAME, "readwrite");
+        tx.objectStore(STORE_NAME).delete(key);
+      } catch {}
+    }
+  };
+
+  // Get estimated storage usage from cache
+  const getUsage = () => {
+    let total = 0;
+    _cache.forEach((v, k) => {
+      total += (k.length + (typeof v === "string" ? v.length : JSON.stringify(v).length)) * 2;
+    });
+    return total;
+  };
+
+  // Get all keys
+  const keys = () => [..._cache.keys()];
+
+  const isReady = () => _ready;
+
+  return { init, get, set, remove, getUsage, keys, isReady };
+})();
+
 const ZODIAC_ANIMALS = [
   { id:"rat",emoji:"🐀",face:"🐭",color:"#8B7355",accent:"#C4A882" },
   { id:"ox",emoji:"🐂",face:"🐮",color:"#6B4423",accent:"#A0522D" },
@@ -285,7 +422,7 @@ const getDailyQuest=(s)=>{
   });
   return{quest,matchedHabitId:match||null};
 };
-const loadState=()=>{try{const s=localStorage.getItem("zodibuddies_v1");if(!s)return null;const st=JSON.parse(s);
+const loadState=()=>{try{const s=ZobuddyDB.get("zodibuddies_v1");if(!s)return null;const st=JSON.parse(s);
   // Migrate: normalize any UTC-formatted dates in completionLog/timestamps to local format
   if(st.completionLog){const cl={};const ct={};
     Object.keys(st.completionLog).forEach(k=>{const d=new Date(k+"T12:00:00");const lk=toDateStr(d);cl[lk]=(cl[lk]||[]).concat(st.completionLog[k]);});
@@ -293,7 +430,7 @@ const loadState=()=>{try{const s=localStorage.getItem("zodibuddies_v1");if(!s)re
     st.completionLog=cl;st.completionTimestamps=ct||st.completionTimestamps;
     if(st.startDate){const sd=new Date(st.startDate+"T12:00:00");st.startDate=toDateStr(sd);}
   }return st;}catch{return null;}};
-const saveState=(s)=>{try{localStorage.setItem("zodibuddies_v1",JSON.stringify(s));}catch{}};
+const saveState=(s)=>{try{ZobuddyDB.set("zodibuddies_v1",JSON.stringify(s));}catch{}};
 
 // Duel Code: 8-character alphanumeric code encoding key stats
 // Layout (packed into 40 bits → 8 base32 chars):
@@ -838,7 +975,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     const[score,setScore]=useState(0);
     const[lives,setLives]=useState(3);
     const[gameOver,setGameOver]=useState(false);
-    const[best,setBest]=useState(()=>{try{return Number(localStorage.getItem("zo_best_bubbles"))||0;}catch{return 0;}});
+    const[best,setBest]=useState(()=>{try{return Number(ZobuddyDB.get("zo_best_bubbles"))||0;}catch{return 0;}});
     const[flash,setFlash]=useState(null); // {idx,ok} for tap feedback
     const GOOD=["🥦","🥕","🌽","🥬","🫑","🥒","🧅","🥑","🍆","🍅"];
     const TRAPS=["🍄","☠️"];
@@ -869,7 +1006,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       return()=>clearInterval(iv);
     },[gameOver,spawnMs,showMs]);
 
-    useEffect(()=>{if(gameOver&&score>best){setBest(score);try{localStorage.setItem("zo_best_bubbles",String(score));}catch{}}},[gameOver]);
+    useEffect(()=>{if(gameOver&&score>best){setBest(score);try{ZobuddyDB.set("zo_best_bubbles",String(score));}catch{}}},[gameOver]);
 
     const tapSlot=(idx)=>{
       const item=slots[idx];if(!item)return;
@@ -923,8 +1060,8 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
   const Breakout=()=>{
     const canvasRef=React.useRef(null);
     const[gameOver,setGameOver]=useState(false);const[score,setScore]=useState(0);const[livesDisplay,setLivesDisplay]=useState(3+bonus);
-    const[best,setBest]=useState(()=>{try{return Number(localStorage.getItem("zo_best_breakout"))||0;}catch{return 0;}});
-    const[bestTime,setBestTime]=useState(()=>{try{return Number(localStorage.getItem("zo_best_breakout_time"))||0;}catch{return 0;}});
+    const[best,setBest]=useState(()=>{try{return Number(ZobuddyDB.get("zo_best_breakout"))||0;}catch{return 0;}});
+    const[bestTime,setBestTime]=useState(()=>{try{return Number(ZobuddyDB.get("zo_best_breakout_time"))||0;}catch{return 0;}});
     const[won,setWon]=useState(false);
     const[elapsed,setElapsed]=useState(0);
     const startRef=React.useRef(Date.now());
@@ -1084,8 +1221,8 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       return()=>{cancelled=true;cancelAnimationFrame(raf);};
     },[]);
     useEffect(()=>{if(gameOver||won)return;const iv=setInterval(()=>setElapsed(Math.floor((Date.now()-startRef.current)/1000)),1000);return()=>clearInterval(iv);},[gameOver,won]);
-    useEffect(()=>{if((gameOver||won)&&score>best){setBest(score);try{localStorage.setItem("zo_best_breakout",String(score));}catch{}}},[gameOver,won]);
-    useEffect(()=>{if(won){const t=Math.floor((Date.now()-startRef.current)/1000);setElapsed(t);if(bestTime===0||t<bestTime){setBestTime(t);try{localStorage.setItem("zo_best_breakout_time",String(t));}catch{}}}},[won]);
+    useEffect(()=>{if((gameOver||won)&&score>best){setBest(score);try{ZobuddyDB.set("zo_best_breakout",String(score));}catch{}}},[gameOver,won]);
+    useEffect(()=>{if(won){const t=Math.floor((Date.now()-startRef.current)/1000);setElapsed(t);if(bestTime===0||t<bestTime){setBestTime(t);try{ZobuddyDB.set("zo_best_breakout_time",String(t));}catch{}}}},[won]);
     if(gameOver||won)return(<div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
       <div style={{fontSize:48,marginBottom:10}}>{won?"🍧":"🍎"}</div><div style={{fontSize:22,fontWeight:900,color:"#e8e0f0"}}>{won?"Yummy Dessert!":"Game Over!"}</div>
       {won&&<div style={{fontSize:14,color:"#43e97b",fontWeight:700,marginTop:2}}>+1000 bonus for clearing all fruits!</div>}
@@ -1128,7 +1265,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     const[gameOver,setGameOver]=useState(false);
     const[startTime,setStartTime]=useState(null);
     const[elapsed,setElapsed]=useState(0);
-    const[best,setBest]=useState(()=>{try{return JSON.parse(localStorage.getItem("zo_best_memory"))||{};}catch{return{};}});
+    const[best,setBest]=useState(()=>{try{return JSON.parse(ZobuddyDB.get("zo_best_memory"))||{};}catch{return{};}});
     const[busy,setBusy]=useState(false);
 
     useEffect(()=>{
@@ -1164,7 +1301,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
           setTimeout(()=>{setMatched(newMatched);setFlipped([]);setBusy(false);
             if(newMatched.length===cards.length){setGameOver(true);
               const sc=moves+1;const key=size.id;
-              if(!best[key]||sc<best[key]){const nb={...best,[key]:sc};setBest(nb);try{localStorage.setItem("zo_best_memory",JSON.stringify(nb));}catch{}}}
+              if(!best[key]||sc<best[key]){const nb={...best,[key]:sc};setBest(nb);try{ZobuddyDB.set("zo_best_memory",JSON.stringify(nb));}catch{}}}
           },400);
         } else {
           setTimeout(()=>{setFlipped([]);setBusy(false);},800);
@@ -1241,7 +1378,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     const ROWS=10,COLS=8,MINES=10;
     const[board,setBoard]=useState(null);const[revealed,setRevealed]=useState(null);const[flagged,setFlagged]=useState(null);
     const[gameOver,setGameOver]=useState(false);const[won,setWon]=useState(false);const[flagMode,setFlagMode]=useState(false);
-    const[best,setBest]=useState(()=>{try{return Number(localStorage.getItem("zo_best_mines"))||0;}catch{return 0;}});
+    const[best,setBest]=useState(()=>{try{return Number(ZobuddyDB.get("zo_best_mines"))||0;}catch{return 0;}});
     const[startTime,setStartTime]=useState(null);const[elapsed,setElapsed]=useState(0);
     const initBoard=()=>{const b=Array(ROWS).fill(null).map(()=>Array(COLS).fill(0));let placed=0;
       while(placed<MINES){const r=Math.floor(Math.random()*ROWS),c=Math.floor(Math.random()*COLS);if(b[r][c]!==-1){b[r][c]=-1;placed++;}}
@@ -1274,7 +1411,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       while(stack.length){const[cr,cc]=stack.pop();if(cr<0||cr>=ROWS||cc<0||cc>=COLS||rv[cr][cc]||flagged[cr][cc])continue;
         rv[cr][cc]=true;if(board[cr][cc]===0){for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++)stack.push([cr+dr,cc+dc]);}}
       setRevealed(rv);let unrevealed=0;for(let i=0;i<ROWS;i++)for(let j=0;j<COLS;j++)if(!rv[i][j])unrevealed++;
-      if(unrevealed===MINES){setWon(true);if(best===0||elapsed<best){setBest(elapsed);try{localStorage.setItem("zo_best_mines",String(elapsed));}catch{}}}};
+      if(unrevealed===MINES){setWon(true);if(best===0||elapsed<best){setBest(elapsed);try{ZobuddyDB.set("zo_best_mines",String(elapsed));}catch{}}}};
     const toggleFlag=(r,c)=>{if(!board||gameOver||won||revealed[r][c])return;setFlagged(prev=>{const n=prev.map(r=>[...r]);n[r][c]=!n[r][c];return n;});};
     const handleCell=(r,c)=>{if(flagMode)toggleFlag(r,c);else reveal(r,c);};
     const flagCount=flagged?flagged.flat().filter(Boolean).length:0;
@@ -1323,7 +1460,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     const[guess,setGuess]=useState([null,null,null,null,null]);
     const[won,setWon]=useState(false);
     const[poolSlots,setPoolSlots]=useState([null,null,null,null,null]);
-    const[best,setBest]=useState(()=>{try{return Number(localStorage.getItem("zo_best_lineup"))||0;}catch{return 0;}});
+    const[best,setBest]=useState(()=>{try{return Number(ZobuddyDB.get("zo_best_lineup"))||0;}catch{return 0;}});
     const[attempts,setAttempts]=useState(0);
     const[lastResult,setLastResult]=useState(null);
     const[history,setHistory]=useState([]);
@@ -1360,7 +1497,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       setHistory(prev=>[...prev,{guess:[...g],correct}]);
       if(correct===5){
         setWon(true);
-        if(best===0||newAttempts<best){setBest(newAttempts);try{localStorage.setItem("zo_best_lineup",String(newAttempts));}catch{}}
+        if(best===0||newAttempts<best){setBest(newAttempts);try{ZobuddyDB.set("zo_best_lineup",String(newAttempts));}catch{}}
       }
     };
 
@@ -1600,7 +1737,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     letMatchRef.current=letMatch;
     const[results,setResults]=useState([]); // {posCorrect,letCorrect,posInput,letInput}
     const[score,setScore]=useState(0);
-    const[best,setBest]=useState(()=>{try{return JSON.parse(localStorage.getItem("zo_best_nback"))||{};}catch{return{};}});
+    const[best,setBest]=useState(()=>{try{return JSON.parse(ZobuddyDB.get("zo_best_nback"))||{};}catch{return{};}});
     const[feedbackMsg,setFeedbackMsg]=useState(null);
     const timerRef=React.useRef(null);
     const posBtnRef=React.useRef(null);
@@ -1701,7 +1838,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
             const pct=Math.round((finalScore/maxPts)*100);
             const bestKey=`n${nLevel}`;
             const prevBest=best[bestKey]||0;
-            if(pct>prevBest){const nb={...best,[bestKey]:pct};setBest(nb);try{localStorage.setItem("zo_best_nback",JSON.stringify(nb));}catch{}}
+            if(pct>prevBest){const nb={...best,[bestKey]:pct};setBest(nb);try{ZobuddyDB.set("zo_best_nback",JSON.stringify(nb));}catch{}}
           }else{
             setStep(s=>s+1);setShowStim(true);
           }
@@ -1842,7 +1979,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
             {id:"lineup",icon:"🔮",name:"Zobuddy Lineup",desc:"Guess the secret lineup from clues!",color:"#a78bfa",best:"zo_best_lineup",bestLabel:" guesses"},
             {id:"nback",icon:"🧠",name:"Dual N-Back",desc:"Train your brain! Match position & letter from N steps ago.",color:"#60a5fa",best:"zo_best_nback",bestLabel:"%"},
           ].map(g=>{
-            const b=(()=>{try{const raw=localStorage.getItem(g.best);if(!raw)return 0;
+            const b=(()=>{try{const raw=ZobuddyDB.get(g.best);if(!raw)return 0;
               if(g.id==="nback"){const obj=JSON.parse(raw);const vals=Object.values(obj);return vals.length?Math.max(...vals):0;}
               return Number(raw)||0;}catch{return 0;}})();
             const bestLabel2=g.id==="nback"&&b>0?"%":(g.bestLabel||"");
@@ -5967,7 +6104,7 @@ const NotebookPanel=()=>{
     const result={};Object.entries(pd).forEach(([k,i])=>{if(ct[i])result[k]=ct[i];});
     return result;
   };
-  const readNb=()=>{try{const raw=JSON.parse(localStorage.getItem(NB_KEY))||{pages:[],archive:[],pwHash:null};
+  const readNb=()=>{try{const raw=JSON.parse(ZobuddyDB.get(NB_KEY))||{pages:[],archive:[],pwHash:null};
     // Decompress pixel data on read
     if(raw.pages)raw.pages.forEach(p=>{if(p.pixels)p.pixels=decompressPixels(p.pixels);});
     if(raw.archive)raw.archive.forEach(p=>{if(p.pixels)p.pixels=decompressPixels(p.pixels);});
@@ -5977,10 +6114,10 @@ const NotebookPanel=()=>{
     const copy=JSON.parse(JSON.stringify(d));
     if(copy.pages)copy.pages.forEach(p=>{if(p.pixels&&!p.pixels._ct)p.pixels=compressPixels(p.pixels);});
     if(copy.archive)copy.archive.forEach(p=>{if(p.pixels&&!p.pixels._ct)p.pixels=compressPixels(p.pixels);});
-    localStorage.setItem(NB_KEY,JSON.stringify(copy));
+    ZobuddyDB.set(NB_KEY,JSON.stringify(copy));
   };
   // Storage usage helper
-  const getStorageUsage=()=>{let total=0;try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);const v=localStorage.getItem(k);total+=(k.length+v.length)*2;}}catch{}return total;};
+  const getStorageUsage=()=>ZobuddyDB.getUsage();
 
   const[nbData,setNbData]=useState(readNb);
   const[nbUnlocked,setNbUnlocked]=useState(false);
@@ -5993,8 +6130,8 @@ const NotebookPanel=()=>{
   const[nbSetPw,setNbSetPw]=useState("");
   const[nbSetPw2,setNbSetPw2]=useState("");
   const[nbExpandedIdx,setNbExpandedIdx]=useState(null);
-  const[nbPreviewMode,setNbPreviewMode]=useState(()=>{try{return localStorage.getItem("zobuddy_nb_preview")!=="false";}catch{return true;}});
-  const togglePreviewMode=()=>{const nv=!nbPreviewMode;setNbPreviewMode(nv);try{localStorage.setItem("zobuddy_nb_preview",String(nv));}catch{}};
+  const[nbPreviewMode,setNbPreviewMode]=useState(()=>{try{return ZobuddyDB.get("zobuddy_nb_preview")!=="false";}catch{return true;}});
+  const togglePreviewMode=()=>{const nv=!nbPreviewMode;setNbPreviewMode(nv);try{ZobuddyDB.set("zobuddy_nb_preview",String(nv));}catch{}};
 
   // Delete/archive from within an open page
   const archiveCurrentPage=()=>{const idx=pageIdxRef.current;const d=readNb();if(!d.pages?.[idx])return;
@@ -6104,7 +6241,7 @@ const NotebookPanel=()=>{
   const simpleHash=(s)=>{let h=0;for(let i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;}return h.toString(36);};
 
   // ─── SINGLE SAVE FUNCTION ──────────────────────────────────────
-  // All saves go through here. Reads current localStorage, patches it, writes back.
+  // All saves go through here. Reads current IndexedDB cache, patches it, writes back.
   const save=(field,value)=>{
     const pi=pageIdxRef.current;
     const d=readNb();
@@ -6126,7 +6263,7 @@ const NotebookPanel=()=>{
   const saveAsPng=(dataUrl,title)=>{const a=document.createElement("a");a.href=dataUrl;a.download=(title||"image")+".png";a.click();};
   const syncState=()=>setNbData(readNb());
 
-  // Full save: saves to localStorage and syncs React state
+  // Full save: saves to IndexedDB and syncs React state
   const saveNb=(d)=>{writeNb(d);setNbData(d);};
 
   // ─── DRAW CANVAS ────────────────────────────────────────────────
@@ -6398,8 +6535,8 @@ const NotebookPanel=()=>{
   const[showVecMoreColors,setShowVecMoreColors]=useState(false);
   const[vecCustomColorCount,setVecCustomColorCount]=useState("48");
   const[pixPaletteSearch,setPixPaletteSearch]=useState("");
-  const[pixCustomLabels,setPixCustomLabels]=useState(()=>{try{return JSON.parse(localStorage.getItem("zobuddy_pix_labels"))||{};}catch{return{};}});
-  const savePixLabels=(l)=>{setPixCustomLabels(l);try{localStorage.setItem("zobuddy_pix_labels",JSON.stringify(l));}catch{}};
+  const[pixCustomLabels,setPixCustomLabels]=useState(()=>{try{return JSON.parse(ZobuddyDB.get("zobuddy_pix_labels"))||{};}catch{return{};}});
+  const savePixLabels=(l)=>{setPixCustomLabels(l);try{ZobuddyDB.set("zobuddy_pix_labels",JSON.stringify(l));}catch{}};
   const getPixels=()=>{const d=readNb();return d.pages?.[nbPageIdx]?.pixels||{};};
   const getPixelDims=()=>{const d=readNb();const page=d.pages?.[nbPageIdx];const ps=page?.pixelSize||"32x32";
     const preset=PIXEL_SIZES.find(s=>s.id===ps);if(preset)return preset;
@@ -7790,9 +7927,9 @@ const LearnPanel=()=>{
   const[apiFact,setApiFact]=useState(null);
   const[apiWord,setApiWord]=useState(null);
   const[apiLoading,setApiLoading]=useState(true);
-  const[learnFavs,setLearnFavs]=useState(()=>{try{return JSON.parse(localStorage.getItem("zodibuddy_learnfavs_v1"))||{teds:[],books:[],courses:[],quotes:[],facts:[],words:[],tips:[],mindful:[],news:[]};}catch{return{teds:[],books:[],courses:[],quotes:[],facts:[],words:[],tips:[],mindful:[],news:[]};}});
+  const[learnFavs,setLearnFavs]=useState(()=>{try{return JSON.parse(ZobuddyDB.get("zodibuddy_learnfavs_v1"))||{teds:[],books:[],courses:[],quotes:[],facts:[],words:[],tips:[],mindful:[],news:[]};}catch{return{teds:[],books:[],courses:[],quotes:[],facts:[],words:[],tips:[],mindful:[],news:[]};}});
   const[showFavs,setShowFavs]=useState(false);
-  const saveLearnFavs=(f)=>{setLearnFavs(f);try{localStorage.setItem("zodibuddy_learnfavs_v1",JSON.stringify(f));}catch{}};
+  const saveLearnFavs=(f)=>{setLearnFavs(f);try{ZobuddyDB.set("zodibuddy_learnfavs_v1",JSON.stringify(f));}catch{}};
   const toggleTedFav=(t)=>{const f={...learnFavs};const idx=f.teds.findIndex(x=>x.title===t.title);if(idx>=0)f.teds.splice(idx,1);else f.teds.push({title:t.title,speaker:t.speaker,url:t.url,cat:t.cat});saveLearnFavs(f);};
   const toggleBookFav=(b)=>{const f={...learnFavs};const idx=f.books.findIndex(x=>x.title===b.title);if(idx>=0)f.books.splice(idx,1);else f.books.push({title:b.title,author:b.author,why:b.why,cat:b.cat});saveLearnFavs(f);};
   const toggleCourseFav=(c)=>{const f={...learnFavs};const idx=f.courses.findIndex(x=>x.name===c.name);if(idx>=0)f.courses.splice(idx,1);else f.courses.push({name:c.name,source:c.source,url:c.url,cat:c.cat,icon:c.icon});saveLearnFavs(f);};
@@ -7805,7 +7942,7 @@ const LearnPanel=()=>{
 
   // Fave Sites - custom + default
   const DEFAULT_NEWS=[{name:"AP News",url:"https://apnews.com",icon:"🔵",color:"#60a5fa",cat:"News"},{name:"Reuters",url:"https://reuters.com",icon:"🟠",color:"#fb923c",cat:"News"},{name:"NPR",url:"https://npr.org/sections/news",icon:"🔴",color:"#f5576c",cat:"News"},{name:"BBC News",url:"https://bbc.com/news",icon:"⚪",color:"#e8e0f0",cat:"News"},{name:"The Guardian",url:"https://theguardian.com/international",icon:"🔵",color:"#38bdf8",cat:"News"},{name:"PBS NewsHour",url:"https://pbs.org/newshour",icon:"🟣",color:"#a78bfa",cat:"News"}];
-  const[newsSources,setNewsSources]=useState(()=>{try{return JSON.parse(localStorage.getItem("zodibuddy_news_v1"))||DEFAULT_NEWS;}catch{return DEFAULT_NEWS;}});
+  const[newsSources,setNewsSources]=useState(()=>{try{return JSON.parse(ZobuddyDB.get("zodibuddy_news_v1"))||DEFAULT_NEWS;}catch{return DEFAULT_NEWS;}});
   const[showAddNews,setShowAddNews]=useState(false);
   const[newNewsName,setNewNewsName]=useState("");
   const[newNewsUrl,setNewNewsUrl]=useState("");
@@ -7813,7 +7950,7 @@ const LearnPanel=()=>{
   const[sitesCatFilter,setSitesCatFilter]=useState("all");
   const siteCategories=useMemo(()=>{const cats=new Set();newsSources.forEach(s=>{if(s.cat)cats.add(s.cat);});return["all",...Array.from(cats).sort()];},[newsSources]);
   const filteredSites=useMemo(()=>sitesCatFilter==="all"?newsSources:newsSources.filter(s=>s.cat===sitesCatFilter),[newsSources,sitesCatFilter]);
-  const saveNewsSources=(s)=>{setNewsSources(s);try{localStorage.setItem("zodibuddy_news_v1",JSON.stringify(s));}catch{}};
+  const saveNewsSources=(s)=>{setNewsSources(s);try{ZobuddyDB.set("zodibuddy_news_v1",JSON.stringify(s));}catch{}};
   const addNewsSource=()=>{if(!newNewsName.trim()||!newNewsUrl.trim())return;
     const url=newNewsUrl.trim().startsWith("http")?newNewsUrl.trim():"https://"+newNewsUrl.trim();
     const cat=newNewsCat.trim()||"Other";
@@ -7821,16 +7958,16 @@ const LearnPanel=()=>{
   const deleteNewsSource=(i)=>{if(!confirm(`Remove "${newsSources[i].name}"?`))return;saveNewsSources(newsSources.filter((_,j)=>j!==i));};
 
   // Flashcard state
-  const[fcCards,setFcCards]=useState(()=>{try{return JSON.parse(localStorage.getItem("zodibuddy_flashcards_v1"))||[];}catch{return[];}});
-  const[fcArchive,setFcArchive]=useState(()=>{try{return JSON.parse(localStorage.getItem("zodibuddy_fc_archive_v1"))||[];}catch{return[];}});
+  const[fcCards,setFcCards]=useState(()=>{try{return JSON.parse(ZobuddyDB.get("zodibuddy_flashcards_v1"))||[];}catch{return[];}});
+  const[fcArchive,setFcArchive]=useState(()=>{try{return JSON.parse(ZobuddyDB.get("zodibuddy_fc_archive_v1"))||[];}catch{return[];}});
   const[fcFlipped,setFcFlipped]=useState(null);
   const[fcNewTerm,setFcNewTerm]=useState("");const[fcNewDef,setFcNewDef]=useState("");const[fcNewCat,setFcNewCat]=useState("");
   const[fcMode,setFcMode]=useState("browse");
   const[fcQuizIdx,setFcQuizIdx]=useState(0);const[fcQuizFlipped,setFcQuizFlipped]=useState(false);
   const[fcEditId,setFcEditId]=useState(null);const[fcEditTerm,setFcEditTerm]=useState("");const[fcEditDef,setFcEditDef]=useState("");const[fcEditCat,setFcEditCat]=useState("");
   const[fcCatFilter,setFcCatFilter]=useState("all");
-  const saveFc=(cards)=>{setFcCards(cards);try{localStorage.setItem("zodibuddy_flashcards_v1",JSON.stringify(cards));}catch{}};
-  const saveFcArchive=(arch)=>{setFcArchive(arch);try{localStorage.setItem("zodibuddy_fc_archive_v1",JSON.stringify(arch));}catch{}};
+  const saveFc=(cards)=>{setFcCards(cards);try{ZobuddyDB.set("zodibuddy_flashcards_v1",JSON.stringify(cards));}catch{}};
+  const saveFcArchive=(arch)=>{setFcArchive(arch);try{ZobuddyDB.set("zodibuddy_fc_archive_v1",JSON.stringify(arch));}catch{}};
   const archiveCard=(id)=>{const card=fcCards.find(c=>c.id===id);if(card){saveFcArchive([...fcArchive,{...card,archivedAt:Date.now()}]);saveFc(fcCards.filter(c=>c.id!==id));}};
   const restoreCard=(id)=>{const card=fcArchive.find(c=>c.id===id);if(card){const{archivedAt,...rest}=card;saveFc([...fcCards,rest]);saveFcArchive(fcArchive.filter(c=>c.id!==id));}};
   const fcCategories=useMemo(()=>{const cats=new Set();fcCards.forEach(c=>{if(c.cat)cats.add(c.cat);});return["all",...Array.from(cats).sort()];},[fcCards]);
@@ -8318,22 +8455,11 @@ function DayPlanner({plannerData,plannerViewDate,setPlannerViewDate,MOODS,getPla
   };
   // Backup: export all app data as JSON
   const BACKUP_KEYS=["zodibuddies_v1","zodibuddy_planner_v1","zodibuddy_clean_v1","zodibuddy_workout_v1","zodibuddy_budget_v1","zodibuddy_journal_v1","zodibuddy_notebook_v1","zodibuddy_flashcards_v1","zodibuddy_fc_archive_v1","zodibuddy_learnfavs_v1","zodibuddy_news_v1","zo_best_bubbles","zo_best_breakout","zo_best_breakout_time","zo_best_memory","zo_best_mines","zo_best_lineup","zo_best_nback"];
-  // ── Daily auto-backup: keeps last 3 days in localStorage ──
-  useEffect(()=>{
-    try{
-      const autoKey=`zobuddy_autobackup_${today}`;
-      if(localStorage.getItem(autoKey))return; // already backed up today
-      const backup={_zobuddy_backup:true,_version:14,_date:new Date().toISOString(),_auto:true};
-      BACKUP_KEYS.forEach(k=>{try{const v=localStorage.getItem(k);if(v)backup[k]=JSON.parse(v);}catch{try{backup[k]=localStorage.getItem(k);}catch{}}});
-      localStorage.setItem(autoKey,JSON.stringify(backup));
-      // Prune: keep only last 3 auto-backups
-      const allKeys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k?.startsWith("zobuddy_autobackup_"))allKeys.push(k);}
-      allKeys.sort();while(allKeys.length>3){localStorage.removeItem(allKeys.shift());}
-    }catch{}
-  },[]);
+  // Clean up any old auto-backups from the localStorage era
+  useEffect(()=>{try{ZobuddyDB.keys().filter(k=>k.startsWith("zobuddy_autobackup_")).forEach(k=>ZobuddyDB.remove(k));}catch{}},[]);
   const exportBackup=()=>{
     const backup={_zobuddy_backup:true,_version:14,_date:new Date().toISOString()};
-    BACKUP_KEYS.forEach(k=>{try{const v=localStorage.getItem(k);if(v)backup[k]=JSON.parse(v);}catch{try{backup[k]=localStorage.getItem(k);}catch{}}});
+    BACKUP_KEYS.forEach(k=>{try{const v=ZobuddyDB.get(k);if(v)backup[k]=JSON.parse(v);}catch{try{backup[k]=ZobuddyDB.get(k);}catch{}}});
     const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);const a=document.createElement("a");
     a.href=url;a.download=`zobuddy_backup_${today}.json`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
@@ -8344,9 +8470,9 @@ function DayPlanner({plannerData,plannerViewDate,setPlannerViewDate,MOODS,getPla
       const data=JSON.parse(restoreText);
       if(!data?._zobuddy_backup){setRestoreError("Not a valid Zobuddy backup file.");return;}
       const keyMap={"app":"zodibuddies_v1","planner":"zodibuddy_planner_v1","clean":"zodibuddy_clean_v1","workout":"zodibuddy_workout_v1","budget":"zodibuddy_budget_v1","journal":"zodibuddy_journal_v1"};
-      Object.entries(keyMap).forEach(([field,key])=>{if(data[field])localStorage.setItem(key,JSON.stringify(data[field]));});
+      Object.entries(keyMap).forEach(([field,key])=>{if(data[field])ZobuddyDB.set(key,JSON.stringify(data[field]));});
       const allKeys=["zodibuddies_v1","zodibuddy_planner_v1","zodibuddy_clean_v1","zodibuddy_workout_v1","zodibuddy_budget_v1","zodibuddy_journal_v1","zodibuddy_notebook_v1","zodibuddy_flashcards_v1","zodibuddy_fc_archive_v1","zodibuddy_learnfavs_v1","zodibuddy_news_v1","zo_best_bubbles","zo_best_breakout","zo_best_breakout_time","zo_best_memory","zo_best_mines","zo_best_lineup","zo_best_nback"];
-      allKeys.forEach(k=>{if(data[k]!=null)localStorage.setItem(k,typeof data[k]==="string"?data[k]:JSON.stringify(data[k]));});
+      allKeys.forEach(k=>{if(data[k]!=null)ZobuddyDB.set(k,typeof data[k]==="string"?data[k]:JSON.stringify(data[k]));});
       setRestoreSuccess(true);
       setTimeout(()=>window.location.reload(),1500);
     }catch(e){setRestoreError("Invalid JSON. Paste the full backup file contents.");}
@@ -9771,20 +9897,20 @@ function SpiritAnimals(){
   const[confetti,setConfetti]=useState(false);
   
   const[usedEffects,setUsedEffects]=useState([]);
-  const[previousGoals,setPreviousGoals]=useState(()=>{try{const p=localStorage.getItem("zodibuddies_prev_goals");return p?JSON.parse(p):[];}catch{return[];}});
+  const[previousGoals,setPreviousGoals]=useState(()=>{try{const p=ZobuddyDB.get("zodibuddies_prev_goals");return p?JSON.parse(p):[];}catch{return[];}});
   const[restoreCode,setRestoreCode]=useState("");const[restoreError,setRestoreError]=useState("");const[showRestore,setShowRestore]=useState(false);
   const[restoreAnimal,setRestoreAnimal]=useState("");const[restoreName,setRestoreName]=useState("");
 
   // ─── PLANNER STATE ────────────────────────────────────────────────
-  const[activeTab,setActiveTab]=useState(()=>{try{return localStorage.getItem("zobuddy_last_tab")||"buddy";}catch{return"buddy";}});
-  useEffect(()=>{try{localStorage.setItem("zobuddy_last_tab",activeTab);}catch{}},[activeTab]);
+  const[activeTab,setActiveTab]=useState(()=>{try{return ZobuddyDB.get("zobuddy_last_tab")||"buddy";}catch{return"buddy";}});
+  useEffect(()=>{try{ZobuddyDB.set("zobuddy_last_tab",activeTab);}catch{}},[activeTab]);
   const[showSettings,setShowSettings]=useState(false);
   const[plannerViewDate,setPlannerViewDate]=useState(getToday());
-  const[plannerData,setPlannerData]=useState(()=>{try{const p=localStorage.getItem("zodibuddy_planner_v1");return p?JSON.parse(p):{};} catch{return {};}});
+  const[plannerData,setPlannerData]=useState(()=>{try{const p=ZobuddyDB.get("zodibuddy_planner_v1");return p?JSON.parse(p):{};} catch{return {};}});
   const[editingSlot,setEditingSlot]=useState(null);
   const[editingText,setEditingText]=useState("");
   const[historyOpen,setHistoryOpen]=useState(false);
-  useEffect(()=>{try{localStorage.setItem("zodibuddy_planner_v1",JSON.stringify(plannerData));}catch{}},[plannerData]);
+  useEffect(()=>{try{ZobuddyDB.set("zodibuddy_planner_v1",JSON.stringify(plannerData));}catch{}},[plannerData]);
 
   const MOODS=[
     {id:"rad",   label:"Rad",   color:"#ffd700",glow:"255,215,0"},
@@ -9816,18 +9942,18 @@ function SpiritAnimals(){
     const day=plannerData[d];
     return day.mood||day.note||(day.slots&&Object.keys(day.slots).length>0);
   }).sort((a,b)=>b.localeCompare(a)),[plannerData]);
-  const[cleanData,setCleanData]=useState(()=>{try{const p=localStorage.getItem("zodibuddy_clean_v1");return p?JSON.parse(p):{};} catch{return {};}});
-  useEffect(()=>{try{localStorage.setItem("zodibuddy_clean_v1",JSON.stringify(cleanData));}catch{}},[cleanData]);
-  const[workoutData,setWorkoutData]=useState(()=>{try{const p=localStorage.getItem("zodibuddy_workout_v1");return p?JSON.parse(p):{};} catch{return {};}});
-  useEffect(()=>{try{localStorage.setItem("zodibuddy_workout_v1",JSON.stringify(workoutData));}catch{}},[workoutData]);
+  const[cleanData,setCleanData]=useState(()=>{try{const p=ZobuddyDB.get("zodibuddy_clean_v1");return p?JSON.parse(p):{};} catch{return {};}});
+  useEffect(()=>{try{ZobuddyDB.set("zodibuddy_clean_v1",JSON.stringify(cleanData));}catch{}},[cleanData]);
+  const[workoutData,setWorkoutData]=useState(()=>{try{const p=ZobuddyDB.get("zodibuddy_workout_v1");return p?JSON.parse(p):{};} catch{return {};}});
+  useEffect(()=>{try{ZobuddyDB.set("zodibuddy_workout_v1",JSON.stringify(workoutData));}catch{}},[workoutData]);
 
   // ─── BUDGET STATE ──────────────────────────────────────────────────
-  const[budgetData,setBudgetData]=useState(()=>{try{const p=localStorage.getItem("zodibuddy_budget_v1");return p?JSON.parse(p):{envelopes:[],transactions:[],monthlyIncome:0};} catch{return {envelopes:[],transactions:[],monthlyIncome:0};}});
-  useEffect(()=>{try{localStorage.setItem("zodibuddy_budget_v1",JSON.stringify(budgetData));}catch{}},[budgetData]);
+  const[budgetData,setBudgetData]=useState(()=>{try{const p=ZobuddyDB.get("zodibuddy_budget_v1");return p?JSON.parse(p):{envelopes:[],transactions:[],monthlyIncome:0};} catch{return {envelopes:[],transactions:[],monthlyIncome:0};}});
+  useEffect(()=>{try{ZobuddyDB.set("zodibuddy_budget_v1",JSON.stringify(budgetData));}catch{}},[budgetData]);
 
   // ─── SECRET JOURNAL STATE ─────────────────────────────────────────
-  const[journalData,setJournalData]=useState(()=>{try{const p=localStorage.getItem("zodibuddy_journal_v1");return p?JSON.parse(p):{entries:{},pwHash:null};} catch{return {entries:{},pwHash:null};}});
-  useEffect(()=>{try{localStorage.setItem("zodibuddy_journal_v1",JSON.stringify(journalData));}catch{}},[journalData]);
+  const[journalData,setJournalData]=useState(()=>{try{const p=ZobuddyDB.get("zodibuddy_journal_v1");return p?JSON.parse(p):{entries:{},pwHash:null};} catch{return {entries:{},pwHash:null};}});
+  useEffect(()=>{try{ZobuddyDB.set("zodibuddy_journal_v1",JSON.stringify(journalData));}catch{}},[journalData]);
 
   const duelStats=appState?calcDuelStats(appState):{power:0};
   const duelCode=useMemo(()=>encodeDuelCode(appState),[appState]);
@@ -9850,7 +9976,7 @@ function SpiritAnimals(){
       const s=getAuraStreak(appState);if(s!==appState.auraStreak)setAppState(p=>({...p,auraStreak:s}));
     }
   },[appState]);
-  useEffect(()=>{try{localStorage.setItem("zodibuddies_prev_goals",JSON.stringify(previousGoals));}catch{}},[previousGoals]);
+  useEffect(()=>{try{ZobuddyDB.set("zodibuddies_prev_goals",JSON.stringify(previousGoals));}catch{}},[previousGoals]);
 
   const addDailyQuest=()=>{
     if(!dailyQuestInfo)return;
@@ -9875,10 +10001,10 @@ function SpiritAnimals(){
     const newState={animal:tempAnimal,buddyName:buddyName||(isCustom?"Buddy":(ZODIAC_ANIMALS.find(a=>a.id===tempAnimal)?.emoji||"Buddy")),selectedHabits:tempHabits,allHabits:[...PRESET_HABITS,...customHabits],completionLog:{},completionTimestamps:{},startDate:getToday(),auraStreak:0};
     if(isCustom)newState.customAnimal={emoji:customEmoji||"🐾"};
     // Apply transfer stats if token was used
-    try{const tr=localStorage.getItem("zodibuddies_transfer");if(tr){const carry=JSON.parse(tr);
+    try{const tr=ZobuddyDB.get("zodibuddies_transfer");if(tr){const carry=JSON.parse(tr);
       newState.completionLog=carry.completionLog||{};newState.completionTimestamps=carry.completionTimestamps||{};
       newState.auraStreak=carry.auraStreak||0;newState.startDate=carry.startDate||getToday();
-      localStorage.removeItem("zodibuddies_transfer");
+      ZobuddyDB.remove("zodibuddies_transfer");
     }}catch{}
     setAppState(newState);setScreen("home");
   };
@@ -9950,11 +10076,11 @@ function SpiritAnimals(){
   const[devTaps,setDevTaps]=useState(0);const[devStreak,setDevStreak]=useState(null);const devTimer=useMemo(()=>({t:null}),[]);
   const transferAndReset=()=>{
     const carry={completionLog:appState.completionLog,completionTimestamps:appState.completionTimestamps,auraStreak:appState.auraStreak,startDate:appState.startDate,allHabits:appState.allHabits,selectedHabits:appState.selectedHabits};
-    localStorage.setItem("zodibuddies_transfer",JSON.stringify(carry));
-    localStorage.removeItem("zodibuddies_v1");
+    ZobuddyDB.set("zodibuddies_transfer",JSON.stringify(carry));
+    ZobuddyDB.remove("zodibuddies_v1");
     setTimeout(()=>window.location.reload(),200);
   };
-  const reset=()=>{localStorage.removeItem("zodibuddies_v1");setTimeout(()=>window.location.reload(),200);};
+  const reset=()=>{ZobuddyDB.remove("zodibuddies_v1");setTimeout(()=>window.location.reload(),200);};
 
   const today=getToday();const doneToday=appState?.completionLog?.[today]||[];
   const habitsData=appState?[...PRESET_HABITS,...(appState.allHabits||[]).filter(h=>h.id?.startsWith("custom_"))]:PRESET_HABITS;
@@ -9963,7 +10089,7 @@ function SpiritAnimals(){
   const allDoneToday=appState?getAllDone(appState):false;const nextLv=LEVEL_REQUIREMENTS.find(l=>l.level===level.level+1);
   const xp=appState?calcXP(appState):0;
   // Save high-water XP mark
-  React.useEffect(()=>{if(appState&&xp>(appState.highXP||0)){const d={...appState,highXP:xp};localStorage.setItem("zodibuddies_v1",JSON.stringify(d));}},[xp]);
+  React.useEffect(()=>{if(appState&&xp>(appState.highXP||0)){const d={...appState,highXP:xp};ZobuddyDB.set("zodibuddies_v1",JSON.stringify(d));}},[xp]);
   const hp=appState?getHP(appState):100;const canEditHabits=true;
   const animalData=appState?getAnimalData(appState):{color:"#8b5cf6",accent:"#a78bfa"};
   const hinted=getHintedEffects(customHabitName);
@@ -10221,29 +10347,29 @@ function SpiritAnimals(){
     setSearchQuery(q);if(!q.trim()||q.trim().length<2){setSearchResults([]);return;}
     const term=q.trim().toLowerCase();const results=[];
     // Search notebook pages (NOT journal)
-    try{const nb=JSON.parse(localStorage.getItem("zodibuddy_notebook_v1")||"{}");
+    try{const nb=JSON.parse(ZobuddyDB.get("zodibuddy_notebook_v1")||"{}");
       (nb.pages||[]).forEach((p,i)=>{
         if((p.title||"").toLowerCase().includes(term))results.push({type:"📓 Notebook",title:`Page ${i+1}: ${p.title}`,preview:p.content?.substring(0,60)||"",tab:"notebook",idx:i});
         else if((p.content||"").toLowerCase().includes(term)){const pos=p.content.toLowerCase().indexOf(term);const start=Math.max(0,pos-20);
           results.push({type:"📓 Notebook",title:`Page ${i+1}: ${p.title||"Untitled"}`,preview:"..."+p.content.substring(start,start+60)+"...",tab:"notebook",idx:i});}
       });}catch{}
     // Search flashcards
-    try{const fc=JSON.parse(localStorage.getItem("zodibuddy_flashcards_v1")||"[]");
+    try{const fc=JSON.parse(ZobuddyDB.get("zodibuddy_flashcards_v1")||"[]");
       fc.forEach(c=>{if(c.term.toLowerCase().includes(term)||c.def.toLowerCase().includes(term))
         results.push({type:"📒 Flashcard",title:c.term,preview:c.def.substring(0,60),cat:c.cat,tab:"learn"});});}catch{}
     // Search planner
-    try{const pl=JSON.parse(localStorage.getItem("zodibuddy_planner_v1")||"{}");
+    try{const pl=JSON.parse(ZobuddyDB.get("zodibuddy_planner_v1")||"{}");
       Object.entries(pl).forEach(([date,day])=>{
         if(day.note&&day.note.toLowerCase().includes(term))results.push({type:"📅 Planner Note",title:date,preview:day.note.substring(0,60),tab:"planner"});
         (day.slots||[]).forEach((s,i)=>{if(s&&s.toLowerCase().includes(term))results.push({type:"📅 Planner Slot",title:`${date} slot ${i}`,preview:s.substring(0,60),tab:"planner"});});
       });}catch{}
     // Search budget envelopes
-    try{const bu=JSON.parse(localStorage.getItem("zodibuddy_budget_v1")||"{}");
+    try{const bu=JSON.parse(ZobuddyDB.get("zodibuddy_budget_v1")||"{}");
       (bu.envelopes||[]).forEach(env=>{if(env.name.toLowerCase().includes(term))results.push({type:"💰 Budget",title:env.name,preview:`$${env.amount} budget`,tab:"budget"});
         (env.transactions||[]).forEach(t=>{if((t.note||"").toLowerCase().includes(term))results.push({type:"💰 Transaction",title:`${env.name}: ${t.note}`,preview:`$${t.amount}`,tab:"budget"});});
       });}catch{}
     // Search learn favorites
-    try{const fv=JSON.parse(localStorage.getItem("zodibuddy_learnfavs_v1")||"{}");
+    try{const fv=JSON.parse(ZobuddyDB.get("zodibuddy_learnfavs_v1")||"{}");
       Object.entries(fv).forEach(([key,arr])=>{if(!Array.isArray(arr))return;
         arr.forEach(item=>{const text=JSON.stringify(item).toLowerCase();
           if(text.includes(term))results.push({type:"⭐ Favorite",title:item.title||item.term||item.word||item.name||item.q||item.text||item.tip||"",preview:item.def||item.a||item.practice||"",tab:"learn"});
@@ -10262,10 +10388,10 @@ function SpiritAnimals(){
         {/* Search */}
         <div style={{marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:700,opacity:.3,marginBottom:4}}>💾 STORAGE</div>
-          {(()=>{const used=getStorageUsage();const max=5*1024*1024;const pct=Math.min(100,Math.round(used/max*100));const mb=(used/1024/1024).toFixed(1);
+          {(()=>{const used=getStorageUsage();const max=50*1024*1024;const pct=Math.min(100,Math.round(used/max*100));const mb=(used/1024/1024).toFixed(1);
             return(<div>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:3}}>
-                <span style={{color:"#e8e0f0",opacity:.6}}>{mb} MB / 5 MB</span>
+                <span style={{color:"#e8e0f0",opacity:.6}}>{mb} MB / 50 MB</span>
                 <span style={{color:pct>80?"#f5576c":pct>60?"#feca57":"#43e97b",fontWeight:700}}>{pct}%</span>
               </div>
               <div style={{height:6,borderRadius:3,background:"rgba(255,255,255,.06)",overflow:"hidden"}}>
@@ -10307,7 +10433,7 @@ function SpiritAnimals(){
             <button onClick={()=>{
               const backup={_zobuddy_backup:true,_version:14,_date:new Date().toISOString()};
               const keys=["zodibuddies_v1","zodibuddy_planner_v1","zodibuddy_clean_v1","zodibuddy_workout_v1","zodibuddy_budget_v1","zodibuddy_journal_v1","zodibuddy_notebook_v1","zodibuddy_flashcards_v1","zodibuddy_fc_archive_v1","zodibuddy_learnfavs_v1","zodibuddy_news_v1","zo_best_bubbles","zo_best_breakout","zo_best_breakout_time","zo_best_memory","zo_best_mines","zo_best_lineup","zo_best_nback"];
-              keys.forEach(k=>{try{const v=localStorage.getItem(k);if(v)backup[k]=JSON.parse(v);}catch{try{backup[k]=localStorage.getItem(k);}catch{}}});
+              keys.forEach(k=>{try{const v=ZobuddyDB.get(k);if(v)backup[k]=JSON.parse(v);}catch{try{backup[k]=ZobuddyDB.get(k);}catch{}}});
               const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
               const url=URL.createObjectURL(blob);const a=document.createElement("a");
               a.href=url;a.download=`zobuddy_backup_${getToday()}.json`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
@@ -10320,10 +10446,10 @@ function SpiritAnimals(){
                   // Restore all keys - support both old format (named fields) and new format (key-based)
                   const keyMap={"app":"zodibuddies_v1","planner":"zodibuddy_planner_v1","clean":"zodibuddy_clean_v1","workout":"zodibuddy_workout_v1","budget":"zodibuddy_budget_v1","journal":"zodibuddy_journal_v1"};
                   // Old format: named fields
-                  Object.entries(keyMap).forEach(([field,key])=>{if(data[field])localStorage.setItem(key,JSON.stringify(data[field]));});
+                  Object.entries(keyMap).forEach(([field,key])=>{if(data[field])ZobuddyDB.set(key,JSON.stringify(data[field]));});
                   // New format: direct localStorage keys
                   const allKeys=["zodibuddies_v1","zodibuddy_planner_v1","zodibuddy_clean_v1","zodibuddy_workout_v1","zodibuddy_budget_v1","zodibuddy_journal_v1","zodibuddy_notebook_v1","zodibuddy_flashcards_v1","zodibuddy_fc_archive_v1","zodibuddy_learnfavs_v1","zodibuddy_news_v1","zo_best_bubbles","zo_best_breakout","zo_best_breakout_time","zo_best_memory","zo_best_mines","zo_best_lineup","zo_best_nback"];
-                  allKeys.forEach(k=>{if(data[k]!=null)localStorage.setItem(k,typeof data[k]==="string"?data[k]:JSON.stringify(data[k]));});
+                  allKeys.forEach(k=>{if(data[k]!=null)ZobuddyDB.set(k,typeof data[k]==="string"?data[k]:JSON.stringify(data[k]));});
                   alert("✅ Restored! Reloading...");setTimeout(()=>window.location.reload(),500);
                 }catch{alert("Invalid backup file.");}};reader.readAsText(file);};input.click();
             }} style={{flex:1,background:"rgba(96,165,250,.08)",border:"1px solid rgba(96,165,250,.15)",borderRadius:12,padding:"10px",fontSize:15,fontWeight:700,color:"#60a5fa",cursor:"pointer"}}>📥 Import</button>
@@ -10585,11 +10711,21 @@ class ErrorBoundary extends React.Component {
         React.createElement("h2",{style:{color:"#f5576c"}},"Something went wrong"),
         React.createElement("pre",{style:{fontSize:12,whiteSpace:"pre-wrap",color:"#feca57",marginTop:10}},String(this.state.error)),
         React.createElement("button",{onClick:()=>{this.setState({hasError:false,error:null});},style:{marginTop:16,padding:"10px 20px",background:"#667eea",color:"#fff",border:"none",borderRadius:10,fontSize:16}},"Try Again"),
-        React.createElement("button",{onClick:()=>{localStorage.removeItem("zodibuddies_v1");window.location.reload();},style:{marginTop:8,marginLeft:8,padding:"10px 20px",background:"#f5576c",color:"#fff",border:"none",borderRadius:10,fontSize:16}},"Reset App")
+        React.createElement("button",{onClick:()=>{ZobuddyDB.remove("zodibuddies_v1");window.location.reload();},style:{marginTop:8,marginLeft:8,padding:"10px 20px",background:"#f5576c",color:"#fff",border:"none",borderRadius:10,fontSize:16}},"Reset App")
       );
     }
     return this.props.children;
   }
 }
 
-root.render(React.createElement(ErrorBoundary,null,React.createElement(SpiritAnimals)));
+// Loading wrapper: initializes IndexedDB before rendering the app
+function AppLoader(){
+  const[ready,setReady]=useState(ZobuddyDB.isReady());
+  useEffect(()=>{if(!ready){ZobuddyDB.init().then(()=>setReady(true)).catch(()=>setReady(true));}},[]);
+  if(!ready)return React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0a0a1a",color:"#e8e0f0",fontFamily:"'Nunito',sans-serif",fontSize:18,flexDirection:"column",gap:12}},
+    React.createElement("div",{style:{fontSize:48}},"🐾"),
+    React.createElement("div",{style:{opacity:.6}},"Loading..."));
+  return React.createElement(SpiritAnimals);
+}
+
+root.render(React.createElement(ErrorBoundary,null,React.createElement(AppLoader)));
