@@ -6006,10 +6006,16 @@ const NotebookPanel=()=>{
   const[vecDrawColor,setVecDrawColor]=useState("#000000");
   const[vecDrawSize,setVecDrawSize]=useState(3);
   const[vecDrawEraser,setVecDrawEraser]=useState(false);
+  const vecDrawColorRef=React.useRef("#000000");
+  const vecDrawSizeRef=React.useRef(3);
+  const vecDrawEraserRef=React.useRef(false);
+  const vecEyedropperRef=React.useRef(false);
   const vecCropDrag=React.useRef(null);
   const vecDrawHistory=React.useRef([]);
   const vecDrawHistoryIdx=React.useRef(-1);
   const[vecEyedropper,setVecEyedropper]=useState(false);
+  // Keep refs in sync with state for canvas event handlers (avoid stale closures)
+  vecDrawColorRef.current=vecDrawColor;vecDrawSizeRef.current=vecDrawSize;vecDrawEraserRef.current=vecDrawEraser;vecEyedropperRef.current=vecEyedropper;
   const vecPushHistory=()=>{const c=vecDrawCanvasRef.current;if(!c)return;const snap=c.toDataURL();vecDrawHistory.current=vecDrawHistory.current.slice(0,vecDrawHistoryIdx.current+1);vecDrawHistory.current.push(snap);if(vecDrawHistory.current.length>30)vecDrawHistory.current.shift();vecDrawHistoryIdx.current=vecDrawHistory.current.length-1;};
   const vecUndoDraw=()=>{if(vecDrawHistoryIdx.current<=0)return;vecDrawHistoryIdx.current--;const c=vecDrawCanvasRef.current;if(!c)return;const ctx=c.getContext("2d");ctx.clearRect(0,0,c.width,c.height);const img2=new Image();img2.onload=()=>{ctx.drawImage(img2,0,0);saveVecDraw();};img2.src=vecDrawHistory.current[vecDrawHistoryIdx.current];};
   const vecRedoDraw=()=>{if(vecDrawHistoryIdx.current>=vecDrawHistory.current.length-1)return;vecDrawHistoryIdx.current++;const c=vecDrawCanvasRef.current;if(!c)return;const ctx=c.getContext("2d");ctx.clearRect(0,0,c.width,c.height);const img2=new Image();img2.onload=()=>{ctx.drawImage(img2,0,0);saveVecDraw();};img2.src=vecDrawHistory.current[vecDrawHistoryIdx.current];};
@@ -7230,8 +7236,7 @@ const NotebookPanel=()=>{
             if(dd){const img2=new Image();img2.onload=()=>{el.getContext("2d").drawImage(img2,0,0);vecPushHistory();};img2.src=dd;}else{vecPushHistory();}
             const getXY=(e)=>{const t=e.touches?e.touches[0]:e;const r=el.getBoundingClientRect();return{x:(t.clientX-r.left)*el.width/r.width,y:(t.clientY-r.top)*el.height/r.height};};
             el.addEventListener("pointerdown",(e)=>{e.preventDefault();const p=getXY(e);
-              // Eyedropper: pick color from the base image
-              if(vecEyedropper){
+              if(vecEyedropperRef.current){
                 const baseImg=el.parentElement?.querySelector("img");if(baseImg){
                   const tc=document.createElement("canvas");tc.width=baseImg.naturalWidth||800;tc.height=baseImg.naturalHeight||800;
                   const tctx=tc.getContext("2d");tctx.drawImage(baseImg,0,0,tc.width,tc.height);
@@ -7242,10 +7247,11 @@ const NotebookPanel=()=>{
                 }return;
               }
               vecIsDrawing.current=true;const ctx=el.getContext("2d");
-              if(vecDrawEraser){ctx.globalCompositeOperation="destination-out";ctx.lineWidth=vecDrawSize*3;}
-              else{ctx.globalCompositeOperation="source-over";ctx.strokeStyle=vecDrawColor;ctx.lineWidth=vecDrawSize;}
+              const col=vecDrawColorRef.current,sz=vecDrawSizeRef.current,erasing=vecDrawEraserRef.current;
+              if(erasing){ctx.globalCompositeOperation="destination-out";ctx.lineWidth=sz*3;}
+              else{ctx.globalCompositeOperation="source-over";ctx.strokeStyle=col;ctx.lineWidth=sz;}
               ctx.lineCap="round";ctx.lineJoin="round";ctx.beginPath();ctx.moveTo(p.x,p.y);
-              ctx.beginPath();ctx.arc(p.x,p.y,vecDrawEraser?vecDrawSize*1.5:vecDrawSize/2,0,Math.PI*2);ctx.fillStyle=vecDrawEraser?"rgba(0,0,0,1)":vecDrawColor;ctx.fill();ctx.beginPath();ctx.moveTo(p.x,p.y);});
+              ctx.beginPath();ctx.arc(p.x,p.y,erasing?sz*1.5:sz/2,0,Math.PI*2);ctx.fillStyle=erasing?"rgba(0,0,0,1)":col;ctx.fill();ctx.beginPath();ctx.moveTo(p.x,p.y);});
             el.addEventListener("pointermove",(e)=>{if(!vecIsDrawing.current)return;e.preventDefault();const ctx=el.getContext("2d");const p=getXY(e);ctx.lineTo(p.x,p.y);ctx.stroke();});
             el.addEventListener("pointerup",()=>{if(vecIsDrawing.current){vecIsDrawing.current=false;el.getContext("2d").globalCompositeOperation="source-over";vecPushHistory();saveVecDraw();}});
             el.addEventListener("pointerleave",()=>{if(vecIsDrawing.current){vecIsDrawing.current=false;saveVecDraw();}});
