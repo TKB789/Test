@@ -7399,7 +7399,7 @@ const NotebookPanel=()=>{
     const hasPrev=nbPageIdx>0,hasNext=nbPageIdx<nbData.pages.length-1;
     const polyPng=page.polyPng||"";
     const polyColors=page.polyColors||[];
-    return(<div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+    return(<div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
       <input ref={polyFileRef} type="file" accept="image/*" style={{display:"none"}}/>
       {/* Row 1: nav */}
       <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px 4px",flexShrink:0}}>
