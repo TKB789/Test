@@ -7248,7 +7248,7 @@ const NotebookPanel=()=>{
           style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{vecImporting?"...":"📷16"}</button>
         <button onClick={()=>vecConvert(32)} disabled={vecImporting}
           style={btn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:9,padding:"3px 6px"})}>{vecImporting?"...":"📷32"}</button>
-        <button onClick={()=>setShowVecMoreColors(v=>!v)} style={btn({fontSize:9,padding:"3px 6px",color:showVecMoreColors?"#feca57":"#888"})}>{showVecMoreColors?"▼":"▶"}More</button>
+        <button onClick={()=>setShowVecMoreColors(v=>!v)} style={btn({fontSize:9,padding:"3px 6px",color:showVecMoreColors?"#feca57":"#888"})}>{showVecMoreColors?"▼":"▶"}Custom</button>
         {showVecMoreColors&&<>
           <input value={vecCustomColorCount} onChange={e=>setVecCustomColorCount(e.target.value.replace(/\D/g,""))} style={{width:36,padding:"2px 4px",borderRadius:4,border:"1px solid rgba(102,126,234,.3)",background:"rgba(102,126,234,.06)",color:"#a8b4f0",fontSize:10,fontWeight:700,textAlign:"center",outline:"none"}}/>
           <button onClick={()=>{const n=Math.max(2,Math.min(438,Number(vecCustomColorCount)||32));vecConvert(n);}} disabled={vecImporting}
@@ -7261,29 +7261,36 @@ const NotebookPanel=()=>{
         <span style={{fontSize:10,opacity:.4,minWidth:28,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
         <button onClick={()=>setPageZoom(z=>Math.min(6,z+0.2))} style={btn({padding:"3px 7px",fontSize:11})}>+</button>
       </div>
-      {/* Row 3: palette + actions */}
+      {/* Row 3: draw + actions */}
       <div style={{display:"flex",alignItems:"center",gap:3,padding:"0 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
-        <button onClick={()=>{setVecShowPicker(v=>!v);setVecPaletteSearch("");}} style={btn({padding:"3px 7px",fontSize:10,color:vecShowPicker?"#feca57":"#888"})}>{vecShowPicker?"▼ Palette":"🎨 Palette"}</button>
+        {hasVecContent&&!vecDrawMode&&<button onClick={()=>setVecDrawMode(true)} style={btn({padding:"3px 8px",fontSize:10,color:"#888"})}>🎨 Draw</button>}
+        {vecColors.length>0&&<button onClick={()=>{setVecShowPicker(v=>!v);setVecPaletteSearch("");}} style={btn({padding:"3px 7px",fontSize:10,color:vecShowPicker?"#feca57":"#888"})}>{vecShowPicker?"▼ Threads":"🧵 Threads"}</button>}
         <div style={{flex:1}}/>
         {hasVecContent&&<button onClick={()=>{
-          const imgSrc=vecPng;if(!imgSrc)return;
-          const legendHtml=vecColors.map((c,i)=>`<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:14px;border-radius:3px;background:${c.color};border:1px solid #ccc;display:inline-block"></span><b>#${i+1}</b> DMC ${c.dmc?.n||"?"} ${c.dmc?.nm||""} <span style="color:#888">(${c.count}px)</span></span>`).join("");
-          const win=window.open("","_blank");
-          if(win){win.document.write(`<html><head><title>${page.title||"Flat Art"}</title><style>@media print{body{margin:0}.no-print{display:none}}body{font-family:sans-serif;margin:0;padding:12px;display:flex;flex-direction:column;align-items:center}img{max-width:100%;height:auto}</style></head><body><h3 style="margin:4px 0">${page.title||"Flat Art"}</h3><img src="${imgSrc}"/><div style="margin:8px 0;font-size:12px;display:flex;flex-wrap:wrap;gap:10px">${legendHtml}</div><div class="no-print" style="margin:8px;display:flex;gap:8px;flex-wrap:wrap"><button onclick="window.print()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">🖨️ Print / Save PDF</button></div></body></html>`);win.document.close();}
+          const d=readNb();const pg=d.pages?.[pageIdxRef.current];if(!pg)return;
+          const imgSrc=pg.vectorPng;const vc=pg.vectorColors||[];if(!imgSrc)return;
+          const showNums=confirm("Include color numbers on the printout?");
+          const legendHtml=vc.map((c,i)=>`<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:14px;border-radius:3px;background:${c.color};border:1px solid #ccc;display:inline-block"></span><b>#${i+1}</b> DMC ${c.dmc?.n||"?"} ${c.dmc?.nm||""} <span style="color:#888">(${c.count}px)</span></span>`).join("");
+          const printEl=document.createElement("div");printEl.id="zobuddy-print-overlay";
+          printEl.innerHTML=`<style>#zobuddy-print-overlay{position:fixed;inset:0;z-index:9999;background:#fff;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:12px}@media print{#zobuddy-print-overlay .no-print{display:none!important}#zobuddy-print-overlay{position:static}}</style><div class="no-print" style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap"><button onclick="window.print()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">🖨️ Print / Save PDF</button><button onclick="document.getElementById('zobuddy-print-overlay').remove()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">✕ Close</button></div><h3 style="margin:4px 0;color:#000">${(page.title||"Flat Art").replace(/</g,"&lt;")}</h3><div style="position:relative;display:inline-block;max-width:90vw"><img src="${imgSrc}" style="max-width:100%;height:auto;display:block"/>${showNums&&vc.length>0?`<div style="position:absolute;inset:0;display:flex;flex-wrap:wrap;pointer-events:none"></div>`:""}</div><div style="margin:8px 0;font-size:12px;display:flex;flex-wrap:wrap;gap:10px">${legendHtml}</div>`;
+          document.body.appendChild(printEl);
         }} style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>🖨 Print</button>}
         {hasVecContent&&<button onClick={()=>{
-          const imgSrc=vecPng;if(!imgSrc)return;
+          const d=readNb();const pg=d.pages?.[pageIdxRef.current];if(!pg)return;
+          const imgSrc=pg.vectorPng;const vc=pg.vectorColors||[];if(!imgSrc)return;
           const pages=prompt("How many pages across? (e.g. 2 = 2×2 = 4 pages, 3 = 3×3 = 9 pages)","2");
           if(!pages)return;const n=Math.max(1,Math.min(6,Number(pages)||2));
-          const legendHtml=vecColors.map((c,i)=>`<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px"><span style="width:12px;height:12px;border-radius:3px;background:${c.color};border:1px solid #ccc;display:inline-block"></span><b>#${i+1}</b> ${c.dmc?.n||""}</span>`).join("");
+          const showNums=confirm("Include color numbers on the printout?");
+          const legendHtml=vc.map((c,i)=>`<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px"><span style="width:12px;height:12px;border-radius:3px;background:${c.color};border:1px solid #ccc;display:inline-block"></span><b>#${i+1}</b> ${c.dmc?.n||""}</span>`).join("");
           let tilesHtml="";
           for(let row=0;row<n;row++)for(let col=0;col<n;col++){
             const pctW=100*n,pctH=100*n;
             const offX=-col*100,offY=-row*100;
             tilesHtml+=`<div style="page-break-after:always;width:100vw;height:100vh;overflow:hidden;position:relative;box-sizing:border-box;border:1px solid #eee"><div style="position:absolute;top:4px;left:4px;font-size:10px;color:#888;z-index:1">Page ${row*n+col+1}/${n*n} (R${row+1}C${col+1})</div><img src="${imgSrc}" style="position:absolute;left:${offX}%;top:${offY}%;width:${pctW}%;height:${pctH}%;object-fit:fill"/></div>`;
           }
-          const win=window.open("","_blank");
-          if(win){win.document.write(`<html><head><title>${page.title||"Flat Art"} - ${n}×${n} Tiled</title><style>@media print{body{margin:0}.no-print{display:none}}body{margin:0;padding:0}</style></head><body>${tilesHtml}<div class="no-print" style="padding:12px;text-align:center"><div style="margin:8px 0;font-size:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center">${legendHtml}</div><button onclick="window.print()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">🖨️ Print ${n}×${n} Pages / Save PDF</button></div></body></html>`);win.document.close();}
+          const printEl=document.createElement("div");printEl.id="zobuddy-print-overlay";
+          printEl.innerHTML=`<style>#zobuddy-print-overlay{position:fixed;inset:0;z-index:9999;background:#fff;overflow:auto}@media print{#zobuddy-print-overlay .no-print{display:none!important}#zobuddy-print-overlay{position:static}}</style>${tilesHtml}<div class="no-print" style="padding:12px;text-align:center;background:#fff"><div style="margin:8px 0;font-size:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center">${legendHtml}</div><button onclick="window.print()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">🖨️ Print ${n}×${n} Pages / Save PDF</button> <button onclick="document.getElementById('zobuddy-print-overlay').remove()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">✕ Close</button></div>`;
+          document.body.appendChild(printEl);
         }} style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>🖨 Multi-Page</button>}
         {vecSvg&&<button onClick={()=>{const blob=new Blob([vecSvg],{type:"image/svg+xml"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=(page.title||"vector")+".svg";a.click();URL.revokeObjectURL(url);}}
           style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>💾 SVG</button>}
@@ -7291,13 +7298,9 @@ const NotebookPanel=()=>{
         <button onClick={archiveCurrentPage} style={btn({color:"#888",padding:"3px 7px",fontSize:10})}>🗃️</button>
         <button onClick={deleteCurrentPage} style={btn({color:"#888",padding:"3px 7px",fontSize:10})}>🗑️</button>
       </div>
-      {/* Palette picker + thread list — hidden until expanded */}
+      {/* Thread list — hidden until expanded */}
       {vecShowPicker&&<div style={{padding:"4px 10px 6px",flexShrink:0}}>
-        <input value={vecPaletteSearch} onChange={e=>setVecPaletteSearch(e.target.value)} placeholder="Search DMC # or color name..." style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid rgba(255,255,255,.12)",background:"rgba(255,255,255,.06)",color:"#e8e0f0",fontSize:11,outline:"none",marginBottom:4,boxSizing:"border-box"}}/>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gap:2,maxHeight:150,overflowY:"auto",overflowX:"hidden"}}>
-          {(vecPaletteSearch.trim()?PIXEL_PALETTE.filter(p=>{const q=vecPaletteSearch.toLowerCase();return p.n.toLowerCase().includes(q)||p.nm.toLowerCase().includes(q);}):PIXEL_PALETTE).map(p=>(<div key={p.n+p.c} title={`DMC ${p.n} — ${p.nm}`} style={{aspectRatio:"1",borderRadius:3,background:p.c,border:"1px solid rgba(255,255,255,.12)",minWidth:0}}/>))}
-        </div>
-        {vecColors.length>0&&<div style={{marginTop:6}}>
+        {vecColors.length>0&&<div>
           <div style={{fontSize:10,fontWeight:700,color:"rgba(232,224,240,.4)",marginBottom:3}}>🧵 Thread List ({vecColors.length} colors)</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:3,maxHeight:100,overflowY:"auto"}}>
             {vecColors.map((c,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:4,background:"rgba(255,255,255,.04)",borderRadius:5,padding:"2px 6px"}}>
@@ -7371,23 +7374,30 @@ const NotebookPanel=()=>{
           {vecColors.length===0&&["#000000","#ffffff","#C72B3B","#13477D","#056517","#FF8313"].map(c=><div key={c} onClick={()=>{setVecDrawColor(c);setVecDrawEraser(false);setVecEyedropper(false);}} style={{width:22,height:22,borderRadius:4,background:c,border:vecDrawColor===c&&!vecDrawEraser?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer",boxSizing:"border-box"}}/>)}
         </div>
       </div>}
-      {/* Grid + draw toggle row */}
+      {/* Grid controls */}
       {hasVecContent&&!vecDrawMode&&<div style={{display:"flex",alignItems:"center",gap:3,padding:"0 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
-        <button onClick={()=>setVecDrawMode(true)} style={btn({padding:"3px 8px",fontSize:10,color:"#888"})}>🎨 Draw</button>
-        <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
         <span style={{fontSize:10,opacity:.4,fontWeight:700}}>Grid:</span>
         {[{v:0,l:"Off"},{v:5,l:"5"},{v:10,l:"10"},{v:20,l:"20"}].map(g=>(
           <button key={g.v} onClick={()=>setVecGrid(g.v)} style={{padding:"2px 5px",borderRadius:6,fontSize:10,fontWeight:700,border:vecGrid===g.v?"1px solid rgba(254,202,87,.5)":"1px solid rgba(255,255,255,.06)",background:vecGrid===g.v?"rgba(254,202,87,.12)":"transparent",color:vecGrid===g.v?"#feca57":"#666",cursor:"pointer"}}>{g.l}</button>))}
       </div>}
-      {/* Image display with grid overlay and draw canvas */}
+      {/* Image display with square grid overlay and draw canvas */}
       <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:12}}>
         {hasVecContent?<div style={{position:"relative",transform:`scale(${pageZoom})`,transformOrigin:"top center",display:"inline-block"}}>
-          <img src={vecPng} style={{maxWidth:"100%",height:"auto",display:"block",imageRendering:"auto"}}/>
-          {/* Grid overlay */}
-          {vecGrid>0&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
-            {Array.from({length:vecGrid-1},(_,i)=><line key={"v"+i} x1={`${(i+1)*100/vecGrid}%`} y1="0" x2={`${(i+1)*100/vecGrid}%`} y2="100%" stroke="rgba(255,255,255,.4)" strokeWidth="0.5"/>)}
-            {Array.from({length:vecGrid-1},(_,i)=><line key={"h"+i} x1="0" y1={`${(i+1)*100/vecGrid}%`} x2="100%" y2={`${(i+1)*100/vecGrid}%`} stroke="rgba(255,255,255,.4)" strokeWidth="0.5"/>)}
-          </svg>}
+          <img ref={(el)=>{if(el)el._vecImg=true;}} src={vecPng} style={{maxWidth:"100%",height:"auto",display:"block",imageRendering:"auto"}} onLoad={(e)=>{
+            // Store natural dimensions for square grid calc
+            const img=e.target;img.dataset.natW=img.naturalWidth;img.dataset.natH=img.naturalHeight;
+          }}/>
+          {/* Square grid overlay — uses the shorter dimension to create equal squares */}
+          {vecGrid>0&&(()=>{
+            const imgEl=document.querySelector("img[data-nat-w]");
+            const natW=Number(imgEl?.dataset?.natW||800),natH=Number(imgEl?.dataset?.natH||800);
+            const cellSize=Math.min(natW,natH)/vecGrid;
+            const cols=Math.floor(natW/cellSize),rows=Math.floor(natH/cellSize);
+            return <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}} viewBox={`0 0 ${natW} ${natH}`} preserveAspectRatio="none">
+              {Array.from({length:cols-1},(_,i)=><line key={"v"+i} x1={cellSize*(i+1)} y1="0" x2={cellSize*(i+1)} y2={natH} stroke="rgba(255,255,255,.4)" strokeWidth="1"/>)}
+              {Array.from({length:rows-1},(_,i)=><line key={"h"+i} x1="0" y1={cellSize*(i+1)} x2={natW} y2={cellSize*(i+1)} stroke="rgba(255,255,255,.4)" strokeWidth="1"/>)}
+            </svg>;
+          })()}
           {/* Draw overlay canvas */}
           {vecDrawMode&&<canvas ref={(el)=>{if(el&&!vecDrawCanvasRef.current){vecDrawCanvasRef.current=el;
             const d=readNb();const dd=d.pages?.[pageIdxRef.current]?.vecDrawData;
