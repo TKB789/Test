@@ -299,12 +299,11 @@ const FILTERS = [
   { id:"dreamy",name:"☁️ Dreamy",css:"blur(0.5px) brightness(1.15) saturate(1.3)" },
 ];
 
-const LEVEL_REQUIREMENTS = [
-  { level:1,xp:0,name:"Seedling" },{ level:2,xp:30,name:"Sprout" },
-  { level:3,xp:80,name:"Bloom" },{ level:4,xp:180,name:"Guardian" },
-  { level:5,xp:350,name:"Champion" },{ level:6,xp:600,name:"Legend" },
-  { level:7,xp:1000,name:"Mythic" },
-];
+// Level system: 99 levels with smooth XP curve
+// Level 1 = 0 XP, Level 2 = 30 XP, scaling up gradually
+// Formula: xp = floor(15 * level^1.8) for level >= 2, level 1 = 0
+const getXPForLevel=(lvl)=>{if(lvl<=1)return 0;return Math.floor(10*Math.pow(lvl,1.7));};
+const LEVEL_REQUIREMENTS = Array.from({length:100},(_,i)=>({level:i+1,xp:getXPForLevel(i+1)}));
 const RARITIES=["Common","Uncommon","Rare","Epic","Legendary","Mythic","TRANSCENDENT"];
 const RARITY_COLORS={Common:"#aaa",Uncommon:"#4ade80",Rare:"#60a5fa",Epic:"#c084fc",Legendary:"#fbbf24",Mythic:"#f472b6",TRANSCENDENT:"#67e8f9"};
 
@@ -715,7 +714,7 @@ const ShareCard=({state,animal,filter="none",onClose,duelCode,onAddGoal})=>{
   const rarity=RARITIES[Math.min(level.level-1,RARITIES.length-1)];const rc=RARITY_COLORS[rarity];
   const glow=streak>=30?"0 0 30px rgba(103,232,249,.6)":streak>=21?"0 0 25px rgba(251,191,36,.5)":streak>=14?"0 0 20px rgba(192,132,252,.4)":streak>=7?"0 0 15px rgba(96,165,250,.3)":"0 8px 32px rgba(0,0,0,.5)";
   const buddyLabel=state.buddyName||"Zobuddy";
-  const txt=`${ad.emoji} ${buddyLabel} Stats\n⚡ Power: ${stats.power}\n❤️ HP: ${hp}%\n🔥 Streak: ${streak}d\n🏆 Lv.${level.level} ${level.name}${stats.tokens>0?`\n🎟️ ${stats.tokens} transfer token${stats.tokens>1?"s":""}`:""}
+  const txt=`${ad.emoji} ${buddyLabel} Stats\n⚡ Power: ${stats.power}\n❤️ HP: ${hp}%\n🔥 Streak: ${streak}d\n🏆 Lv.${level.level}${stats.tokens>0?`\n🎟️ ${stats.tokens} transfer token${stats.tokens>1?"s":""}`:""}
 \nChallenge me! Enter my power (${stats.power}) to battle 🎲🎲\n🔑 Code: ${duelCode}`;
   const copy=()=>{navigator.clipboard?.writeText(txt);setCopied(true);setTimeout(()=>setCopied(false),2000);};
   const share=async()=>{
@@ -761,7 +760,7 @@ const ShareCard=({state,animal,filter="none",onClose,duelCode,onAddGoal})=>{
               <div style={{fontSize:11,letterSpacing:3,opacity:.4,fontWeight:700}}>ZOBUDDY</div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginTop:1,paddingRight:28}}>
                 <div style={{fontSize:17,fontWeight:900}}>{buddyLabel}</div>
-                <div style={{fontSize:14,fontWeight:900,color:rc,textShadow:`0 0 8px ${rc}66`}}>Lv.{level.level} <span style={{fontSize:13,opacity:.6,fontWeight:600}}>{level.name}</span></div>
+                <div style={{fontSize:14,fontWeight:900,color:rc,textShadow:`0 0 8px ${rc}66`}}>Lv.{level.level}</div>
               </div>
             </div>
             <div style={{margin:"10px -4px",borderRadius:12,background:`linear-gradient(180deg,${ad.color}15 0%,${ad.accent}10 50%,transparent 100%)`,border:`1px solid ${ad.accent}22`,padding:"4px 0",position:"relative",zIndex:2}}>
@@ -10559,7 +10558,7 @@ function SpiritAnimals(){
               {/* Name + Level row */}
               <div onClick={()=>{clearTimeout(devTimer.t);setDevTaps(p=>{const n=p+1;if(n>=5){setDevStreak(prev=>prev!==null?null:0);return 0;}devTimer.t=setTimeout(()=>setDevTaps(0),1500);return n;});}} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",cursor:"default"}}>
                 <div style={{fontSize:16,fontWeight:900,background:"linear-gradient(135deg,#f093fb,#f5576c,#feca57)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1.2}}>{appState?.buddyName||"Zobuddy"}</div>
-                <div style={{fontSize:12,opacity:.35}}>Day {days} • Lv.{level.level} {level.name}</div>
+                <div style={{fontSize:12,opacity:.35}}>Day {days} • Lv.{level.level}</div>
               </div>
               {devStreak!==null&&<div style={{margin:"4px auto",maxWidth:220}}>
                 <div style={{fontSize:11,opacity:.4,textAlign:"center",marginBottom:2}}>🔧 Dev: Streak preview ({devStreak}d)</div>
@@ -10600,10 +10599,10 @@ function SpiritAnimals(){
               </div>}
 
               {/* Level progress */}
-              {nextLv&&<div>
-                <div style={{display:"flex",justifyContent:"space-between",fontSize:11,opacity:.3,marginBottom:2}}><span>Next: {nextLv.name}</span><span>{xp}/{nextLv.xp} XP</span></div>
+              {nextLv?<div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:11,opacity:.3,marginBottom:2}}><span>Lv.{nextLv.level}</span><span>{xp}/{nextLv.xp} XP</span></div>
                 <div style={{height:3,borderRadius:2,background:"rgba(255,255,255,.05)",overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg,#667eea,#f093fb)",width:`${Math.min(100,((xp-level.xp)/Math.max(1,nextLv.xp-level.xp))*100)}%`,transition:"width .5s"}}/></div>
-              </div>}
+              </div>:<div style={{fontSize:11,opacity:.3,textAlign:"center"}}>✨ Max Level — {xp} XP</div>}
             </div>
           </div>
         </div>
