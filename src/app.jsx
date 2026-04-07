@@ -6161,6 +6161,8 @@ const NotebookPanel=()=>{
   const[vecImgW,setVecImgW]=useState(800);
   const[vecImgH,setVecImgH]=useState(800);
   const[vecOrigOpacity,setVecOrigOpacity]=useState(0); // 0 = hidden, 0.1-1 = visible
+  const[vecPalExpanded,setVecPalExpanded]=useState(false);
+  const[vecFullPalette,setVecFullPalette]=useState(false);
   const vecDrawCanvasRef=React.useRef(null);
   const vecDrawDataRef=React.useRef(null);
   const vecIsDrawing=React.useRef(false);
@@ -7219,8 +7221,6 @@ const NotebookPanel=()=>{
     if(d.pages?.[pi]){d.pages[pi].vecDrawData=c.toDataURL("image/png");saveNb(d);}};
 
   // ═══ VECTOR PAGE ═══
-  const[vecPalExpanded,setVecPalExpanded]=useState(false);
-  const[vecFullPalette,setVecFullPalette]=useState(false);
   if(nbView==="page"&&nbData.pages[nbPageIdx]?.type==="vector"){
     const page=nbData.pages[nbPageIdx];
     const hasPrev=nbPageIdx>0,hasNext=nbPageIdx<nbData.pages.length-1;
@@ -7229,7 +7229,7 @@ const NotebookPanel=()=>{
     const vecColors=page.vectorColors||[];
     const hasVecContent=vecSvg||vecPng;
     // Sort colors by hue for gradient display
-    const sortedColors=useMemo(()=>{if(!vecColors.length)return[];
+    const sortedColors=(()=>{if(!vecColors.length)return[];
       return [...vecColors].sort((a,b)=>{
         const hue=(hex)=>{const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,bl=parseInt(hex.slice(5,7),16)/255;
           const mx=Math.max(r,g,bl),mn=Math.min(r,g,bl),d=mx-mn;if(d===0)return 0;
@@ -7237,7 +7237,7 @@ const NotebookPanel=()=>{
           return(h*60+360)%360;};
         const lum=(hex)=>{const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),bl=parseInt(hex.slice(5,7),16);return r*.299+g*.587+bl*.114;};
         const ha=hue(a.color),hb=hue(b.color);if(Math.abs(ha-hb)>15)return ha-hb;return lum(a.color)-lum(b.color);
-      });},[vecColors]);
+      });})();
     // Color swatch with contrast border
     const cSwatch=(color,selected,size=24)=>{
       const lum=parseInt(color.slice(1,3),16)*.299+parseInt(color.slice(3,5),16)*.587+parseInt(color.slice(5,7),16)*.114;
