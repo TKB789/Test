@@ -7215,7 +7215,7 @@ const NotebookPanel=()=>{
   };
   // Save vector draw overlay
   const saveVecDraw=()=>{const c=vecDrawCanvasRef.current;if(!c)return;const d=readNb();const pi=pageIdxRef.current;
-    if(d.pages?.[pi]){d.pages[pi].vecDrawData=c.toDataURL("image/png");try{writeNb(d);}catch{}}};
+    if(d.pages?.[pi]){d.pages[pi].vecDrawData=c.toDataURL("image/png");saveNb(d);}};
 
   // ═══ VECTOR PAGE ═══
   if(nbView==="page"&&nbData.pages[nbPageIdx]?.type==="vector"){
