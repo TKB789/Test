@@ -7950,10 +7950,10 @@ const LearnPanel=()=>{
   const[learnFavs,setLearnFavs]=useState(()=>{try{return JSON.parse(ZobuddyDB.get("zodibuddy_learnfavs_v1"))||{teds:[],books:[],courses:[],quotes:[],facts:[],words:[],tips:[],mindful:[],news:[]};}catch{return{teds:[],books:[],courses:[],quotes:[],facts:[],words:[],tips:[],mindful:[],news:[]};}});
   const[showFavs,setShowFavs]=useState(false);
   const saveLearnFavs=(f)=>{setLearnFavs(f);try{ZobuddyDB.set("zodibuddy_learnfavs_v1",JSON.stringify(f));}catch{}};
-  const toggleTedFav=(t)=>{const f={...learnFavs};const idx=f.teds.findIndex(x=>x.title===t.title);if(idx>=0)f.teds.splice(idx,1);else f.teds.push({title:t.title,speaker:t.speaker,url:t.url,cat:t.cat});saveLearnFavs(f);};
-  const toggleBookFav=(b)=>{const f={...learnFavs};const idx=f.books.findIndex(x=>x.title===b.title);if(idx>=0)f.books.splice(idx,1);else f.books.push({title:b.title,author:b.author,why:b.why,cat:b.cat});saveLearnFavs(f);};
-  const toggleCourseFav=(c)=>{const f={...learnFavs};const idx=f.courses.findIndex(x=>x.name===c.name);if(idx>=0)f.courses.splice(idx,1);else f.courses.push({name:c.name,source:c.source,url:c.url,cat:c.cat,icon:c.icon});saveLearnFavs(f);};
-  const toggleSimpleFav=(key,item,matchFn)=>{const f={...learnFavs};if(!f[key])f[key]=[];const idx=f[key].findIndex(matchFn);if(idx>=0)f[key].splice(idx,1);else f[key].push(item);saveLearnFavs(f);};
+  const toggleTedFav=(t)=>{const f={...learnFavs};const idx=f.teds.findIndex(x=>x.title===t.title);if(idx>=0){if(!confirm("Remove from favorites?"))return;f.teds.splice(idx,1);}else f.teds.push({title:t.title,speaker:t.speaker,url:t.url,cat:t.cat});saveLearnFavs(f);};
+  const toggleBookFav=(b)=>{const f={...learnFavs};const idx=f.books.findIndex(x=>x.title===b.title);if(idx>=0){if(!confirm("Remove from favorites?"))return;f.books.splice(idx,1);}else f.books.push({title:b.title,author:b.author,why:b.why,cat:b.cat});saveLearnFavs(f);};
+  const toggleCourseFav=(c)=>{const f={...learnFavs};const idx=f.courses.findIndex(x=>x.name===c.name);if(idx>=0){if(!confirm("Remove from favorites?"))return;f.courses.splice(idx,1);}else f.courses.push({name:c.name,source:c.source,url:c.url,cat:c.cat,icon:c.icon});saveLearnFavs(f);};
+  const toggleSimpleFav=(key,item,matchFn)=>{const f={...learnFavs};if(!f[key])f[key]=[];const idx=f[key].findIndex(matchFn);if(idx>=0){if(!confirm("Remove from favorites?"))return;f[key].splice(idx,1);}else f[key].push(item);saveLearnFavs(f);};
   const isSimpleFav=(key,matchFn)=>(learnFavs[key]||[]).some(matchFn);
   const isTedFav=(t)=>learnFavs.teds.some(x=>x.title===t.title);
   const isBookFav=(b)=>learnFavs.books.some(x=>x.title===b.title);
@@ -10573,10 +10573,10 @@ function SpiritAnimals(){
       
 
       {/* Header */}
-      <div style={{padding:"8px 16px 0"}}>
+      <div style={{padding:"6px 16px 0"}}>
         {/* ── Buddy Card (styled like stats card) ── */}
         <div style={{borderRadius:16,padding:2,background:allDoneToday?`linear-gradient(135deg,${animalData.color},${animalData.accent},#feca57,${animalData.color})`:"rgba(255,255,255,.08)",backgroundSize:"300% 300%",animation:allDoneToday?"holoShift 4s ease infinite":"none",boxShadow:allDoneToday?(streak>=30?"0 0 30px rgba(103,232,249,.6)":streak>=21?"0 0 25px rgba(251,191,36,.5)":streak>=14?"0 0 20px rgba(192,132,252,.4)":streak>=7?"0 0 15px rgba(96,165,250,.3)":"0 8px 32px rgba(0,0,0,.5)"):"0 8px 32px rgba(0,0,0,.5)"}}>
-          <div style={{borderRadius:14,background:"linear-gradient(160deg,#0d0d2b 0%,#1a1040 30%,#0f1a3a 60%,#0d0d2b 100%)",padding:"12px 14px",position:"relative",overflow:"hidden"}}>
+          <div style={{borderRadius:14,background:"linear-gradient(160deg,#0d0d2b 0%,#1a1040 30%,#0f1a3a 60%,#0d0d2b 100%)",padding:"8px 12px",position:"relative",overflow:"hidden"}}>
             {allDoneToday&&<div style={{position:"absolute",inset:0,borderRadius:14,background:"linear-gradient(105deg,transparent 30%,rgba(255,255,255,.03) 45%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.03) 55%,transparent 70%)",backgroundSize:"200% 200%",animation:"holoShimmer 3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>}
             <div style={{position:"relative",zIndex:2}}>
               {/* Name + Level row */}
@@ -10590,10 +10590,10 @@ function SpiritAnimals(){
               </div>}
 
               {/* Buddy display */}
-              <div style={{margin:"8px -4px 6px",borderRadius:12,background:`linear-gradient(180deg,${animalData.color}12 0%,${animalData.accent}08 50%,transparent 100%)`,border:`1px solid ${animalData.accent}18`,padding:"4px 0",display:"flex",alignItems:"center",justifyContent:"center",minHeight:140,position:"relative"}}>
+              <div style={{margin:"4px -4px 4px",borderRadius:12,background:`linear-gradient(180deg,${animalData.color}12 0%,${animalData.accent}08 50%,transparent 100%)`,border:`1px solid ${animalData.accent}18`,padding:"2px 0",display:"flex",alignItems:"center",justifyContent:"center",minHeight:110,position:"relative"}}>
                 <div style={{position:"relative"}}>
                   {negCount>0&&!allDoneToday&&<div style={{textAlign:"center",position:"absolute",top:-2,left:"50%",transform:"translateX(-50%)",zIndex:3,whiteSpace:"nowrap"}}><span style={{fontSize:11,color:"#f5576c",opacity:.7}}>⚠️ {negCount} effect{negCount>1?"s":""} active</span></div>}
-                  <BuddyDisplay animal={appState?.animal} state={{...(appState||{}),_roaming:isRoaming&&!fullBack,auraStreak:streak}} size={130}/>
+                  <BuddyDisplay animal={appState?.animal} state={{...(appState||{}),_roaming:isRoaming&&!fullBack,auraStreak:streak}} size={105}/>
                 </div>
                 {allDoneToday&&<div style={{position:"absolute",bottom:4,left:"50%",transform:"translateX(-50%)",zIndex:3}}>
                   <span style={{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",borderRadius:20,padding:"3px 12px",fontSize:12,fontWeight:800,color:"#43e97b",boxShadow:"0 0 12px rgba(67,233,123,.3)",whiteSpace:"nowrap"}}>✅ All Goals Completed</span>
@@ -10633,8 +10633,8 @@ function SpiritAnimals(){
       </div>
 
       {/* Goals */}
-      <div style={{padding:"8px 16px 0"}}>
-        <div style={{background:"rgba(255,255,255,.03)",borderRadius:12,border:"1px solid rgba(255,255,255,.06)",padding:"8px 10px"}}>
+      <div style={{padding:"6px 16px 0"}}>
+        <div style={{background:"rgba(255,255,255,.03)",borderRadius:12,border:"1px solid rgba(255,255,255,.06)",padding:"6px 10px"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
             <span style={{fontSize:12,fontWeight:700,opacity:.3,letterSpacing:1}}>GOALS</span>
             {canEditHabits?<button onClick={()=>openEditGoals()} style={{background:"rgba(102,126,234,.12)",border:"1px solid rgba(102,126,234,.25)",borderRadius:6,padding:"2px 8px",fontSize:12,color:"#a8b4f0",cursor:"pointer",fontWeight:700}}>✏️ Edit</button>
@@ -10651,7 +10651,7 @@ function SpiritAnimals(){
       </div>
 
       {/* Daily Quest */}
-      {dailyQuestInfo&&<div style={{margin:"6px 16px 0",padding:"8px 12px",borderRadius:10,background:"linear-gradient(135deg,rgba(254,202,87,.06),rgba(255,165,0,.03))",border:"1px solid rgba(254,202,87,.12)"}}>
+      {dailyQuestInfo&&<div style={{margin:"4px 16px 0",padding:"6px 12px",borderRadius:10,background:"linear-gradient(135deg,rgba(254,202,87,.06),rgba(255,165,0,.03))",border:"1px solid rgba(254,202,87,.12)"}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:15}}>{dailyQuestInfo.icon}</span>
           <div style={{flex:1}}>
@@ -10665,10 +10665,10 @@ function SpiritAnimals(){
       </div>}
 
       {/* Action buttons */}
-      <div style={{display:"flex",gap:6,padding:"10px 16px 14px"}}>
-        <button onClick={()=>setShowShare(true)} style={{...S.btn,flex:1,fontSize:16,padding:"11px 0",background:"linear-gradient(135deg,#43e97b,#38f9d7)",color:"#1a1a2e"}}>📊 Stats</button>
-        <button onClick={()=>setShowDuel(true)} style={{...S.btn,flex:1,fontSize:16,padding:"11px 0",background:"linear-gradient(135deg,#f093fb,#f5576c)"}}>⚔️ Battle</button>
-        <button onClick={()=>setShowMiniGames(true)} style={{...S.btn,flex:1,fontSize:16,padding:"11px 0",background:"linear-gradient(135deg,#feca57,#fb923c)",color:"#1a1a2e"}}>🎮 Games</button>
+      <div style={{display:"flex",gap:6,padding:"6px 16px 10px"}}>
+        <button onClick={()=>setShowShare(true)} style={{...S.btn,flex:1,fontSize:15,padding:"9px 0",background:"linear-gradient(135deg,#43e97b,#38f9d7)",color:"#1a1a2e"}}>📊 Stats</button>
+        <button onClick={()=>setShowDuel(true)} style={{...S.btn,flex:1,fontSize:15,padding:"9px 0",background:"linear-gradient(135deg,#f093fb,#f5576c)"}}>⚔️ Battle</button>
+        <button onClick={()=>setShowMiniGames(true)} style={{...S.btn,flex:1,fontSize:15,padding:"9px 0",background:"linear-gradient(135deg,#feca57,#fb923c)",color:"#1a1a2e"}}>🎮 Games</button>
       </div>
 
 
