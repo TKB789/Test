@@ -6868,9 +6868,9 @@ const NotebookPanel=()=>{
     textRef.current=next;if(textareaRef.current)textareaRef.current.value=next;saveText();};
 
   // ─── NAVIGATION ─────────────────────────────────────────────────
-  const goToc=()=>{saveAll();syncState();setPageDrawMode(false);setPageZoom(1);setNbView("toc");};
-  const goPrev=()=>{saveAll();drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=pageIdxRef.current-1;setNbPageIdx(i=>i-1);};
-  const goNext=()=>{saveAll();drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=pageIdxRef.current+1;setNbPageIdx(i=>i+1);};
+  const goToc=()=>{saveAll();saveVecDraw();syncState();setPageDrawMode(false);setPageZoom(1);vecDrawCanvasRef.current=null;setNbView("toc");};
+  const goPrev=()=>{saveAll();saveVecDraw();drawImgRef.current=null;drawCanvasRef.current=null;vecDrawCanvasRef.current=null;pageIdxRef.current=pageIdxRef.current-1;setNbPageIdx(i=>i-1);};
+  const goNext=()=>{saveAll();saveVecDraw();drawImgRef.current=null;drawCanvasRef.current=null;vecDrawCanvasRef.current=null;pageIdxRef.current=pageIdxRef.current+1;setNbPageIdx(i=>i+1);};
 
   // ─── STYLES ─────────────────────────────────────────────────────
   const hs=20,hcol=hs*1.5,hrow=Math.round(hs*Math.sqrt(3)),hoff=Math.round(hrow/2);
@@ -7219,6 +7219,8 @@ const NotebookPanel=()=>{
     if(d.pages?.[pi]){d.pages[pi].vecDrawData=c.toDataURL("image/png");saveNb(d);}};
 
   // ═══ VECTOR PAGE ═══
+  const[vecPalExpanded,setVecPalExpanded]=useState(false);
+  const[vecFullPalette,setVecFullPalette]=useState(false);
   if(nbView==="page"&&nbData.pages[nbPageIdx]?.type==="vector"){
     const page=nbData.pages[nbPageIdx];
     const hasPrev=nbPageIdx>0,hasNext=nbPageIdx<nbData.pages.length-1;
@@ -7226,6 +7228,22 @@ const NotebookPanel=()=>{
     const vecPng=page.vectorPng||"";
     const vecColors=page.vectorColors||[];
     const hasVecContent=vecSvg||vecPng;
+    // Sort colors by hue for gradient display
+    const sortedColors=useMemo(()=>{if(!vecColors.length)return[];
+      return [...vecColors].sort((a,b)=>{
+        const hue=(hex)=>{const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,bl=parseInt(hex.slice(5,7),16)/255;
+          const mx=Math.max(r,g,bl),mn=Math.min(r,g,bl),d=mx-mn;if(d===0)return 0;
+          let h=0;if(mx===r)h=((g-bl)/d)%6;else if(mx===g)h=(bl-r)/d+2;else h=(r-g)/d+4;
+          return(h*60+360)%360;};
+        const lum=(hex)=>{const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),bl=parseInt(hex.slice(5,7),16);return r*.299+g*.587+bl*.114;};
+        const ha=hue(a.color),hb=hue(b.color);if(Math.abs(ha-hb)>15)return ha-hb;return lum(a.color)-lum(b.color);
+      });},[vecColors]);
+    // Color swatch with contrast border
+    const cSwatch=(color,selected,size=24)=>{
+      const lum=parseInt(color.slice(1,3),16)*.299+parseInt(color.slice(3,5),16)*.587+parseInt(color.slice(5,7),16)*.114;
+      const borderC=selected?"#feca57":lum<80?"rgba(255,255,255,.35)":"rgba(0,0,0,.2)";
+      return{width:size,height:size,borderRadius:4,background:color,border:selected?`2px solid ${borderC}`:`1px solid ${borderC}`,cursor:"pointer",boxSizing:"border-box",flexShrink:0};
+    };
     return(<div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
       <input ref={vecFileRef} type="file" accept="image/*" style={{display:"none"}}/>
       {/* Row 1: nav */}
@@ -7242,7 +7260,7 @@ const NotebookPanel=()=>{
         </div>
         <button onClick={doSave} style={btn(saved?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b"}:{color:"#aaa"})}>{saved?"Saved ✓":"Save"}</button>
       </div>
-      {/* Row 2: import options */}
+      {/* Row 2: Convert + actions */}
       <div style={{display:"flex",alignItems:"center",gap:3,padding:"2px 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
         <span style={{fontSize:10,opacity:.4,fontWeight:700}}>Convert:</span>
         <button onClick={()=>vecConvert(8)} disabled={vecImporting}
@@ -7260,47 +7278,19 @@ const NotebookPanel=()=>{
             style={btn({background:"rgba(240,147,251,.1)",border:"1px solid rgba(240,147,251,.2)",color:"#f093fb",fontSize:9,padding:"3px 6px"})}>{vecImporting?"...":"📷All"}</button>
         </>}
         <div style={{flex:1}}/>
-        <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={btn({padding:"3px 7px",fontSize:11})}>−</button>
-        <span style={{fontSize:10,opacity:.4,minWidth:28,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
-        <button onClick={()=>setPageZoom(z=>Math.min(6,z+0.2))} style={btn({padding:"3px 7px",fontSize:11})}>+</button>
-      </div>
-      {/* Row 3: draw + actions */}
-      <div style={{display:"flex",alignItems:"center",gap:3,padding:"0 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
-        {hasVecContent&&!vecDrawMode&&<button onClick={()=>setVecDrawMode(true)} style={btn({padding:"3px 8px",fontSize:10,color:"#888"})}>🎨 Draw</button>}
-        <div style={{flex:1}}/>
         {hasVecContent&&<button onClick={()=>{
           const d=readNb();const pg=d.pages?.[pageIdxRef.current];if(!pg)return;
           const imgSrc=pg.vectorPng;const vc=pg.vectorColors||[];if(!imgSrc)return;
           const showNums=confirm("Include color numbers on the printout?");
           const legendHtml=vc.map((c,i)=>`<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:14px;border-radius:3px;background:${c.color};border:1px solid #ccc;display:inline-block"></span><b>#${i+1}</b> DMC ${c.dmc?.n||"?"} ${c.dmc?.nm||""} <span style="color:#888">(${c.count}px)</span></span>`).join("");
           const printEl=document.createElement("div");printEl.id="zobuddy-print-overlay";
-          printEl.innerHTML=`<style>#zobuddy-print-overlay{position:fixed;inset:0;z-index:9999;background:#fff;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:12px}@media print{#zobuddy-print-overlay .no-print{display:none!important}#zobuddy-print-overlay{position:static}}</style><div class="no-print" style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap"><button onclick="window.print()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">🖨️ Print / Save PDF</button><button onclick="document.getElementById('zobuddy-print-overlay').remove()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">✕ Close</button></div><h3 style="margin:4px 0;color:#000">${(page.title||"Flat Art").replace(/</g,"&lt;")}</h3><div style="position:relative;display:inline-block;max-width:90vw"><img src="${imgSrc}" style="max-width:100%;height:auto;display:block"/>${showNums&&vc.length>0?`<div style="position:absolute;inset:0;display:flex;flex-wrap:wrap;pointer-events:none"></div>`:""}</div><div style="margin:8px 0;font-size:12px;display:flex;flex-wrap:wrap;gap:10px">${legendHtml}</div>`;
+          printEl.innerHTML=`<style>#zobuddy-print-overlay{position:fixed;inset:0;z-index:9999;background:#fff;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:12px}@media print{#zobuddy-print-overlay .no-print{display:none!important}#zobuddy-print-overlay{position:static}}</style><div class="no-print" style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap"><button onclick="window.print()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">🖨️ Print / Save PDF</button><button onclick="document.getElementById('zobuddy-print-overlay').remove()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">✕ Close</button></div><h3 style="margin:4px 0;color:#000">${(page.title||"Flat Art").replace(/</g,"&lt;")}</h3><div style="position:relative;display:inline-block;max-width:90vw"><img src="${imgSrc}" style="max-width:100%;height:auto;display:block"/></div><div style="margin:8px 0;font-size:12px;display:flex;flex-wrap:wrap;gap:10px">${legendHtml}</div>`;
           document.body.appendChild(printEl);
-        }} style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>🖨 Print</button>}
-        {hasVecContent&&<button onClick={()=>{
-          const d=readNb();const pg=d.pages?.[pageIdxRef.current];if(!pg)return;
-          const imgSrc=pg.vectorPng;const vc=pg.vectorColors||[];if(!imgSrc)return;
-          const pages=prompt("How many pages across? (e.g. 2 = 2×2 = 4 pages, 3 = 3×3 = 9 pages)","2");
-          if(!pages)return;const n=Math.max(1,Math.min(6,Number(pages)||2));
-          const showNums=confirm("Include color numbers on the printout?");
-          const legendHtml=vc.map((c,i)=>`<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px"><span style="width:12px;height:12px;border-radius:3px;background:${c.color};border:1px solid #ccc;display:inline-block"></span><b>#${i+1}</b> ${c.dmc?.n||""}</span>`).join("");
-          let tilesHtml="";
-          for(let row=0;row<n;row++)for(let col=0;col<n;col++){
-            const pctW=100*n,pctH=100*n;
-            const offX=-col*100,offY=-row*100;
-            tilesHtml+=`<div style="page-break-after:always;width:100vw;height:100vh;overflow:hidden;position:relative;box-sizing:border-box;border:1px solid #eee"><div style="position:absolute;top:4px;left:4px;font-size:10px;color:#888;z-index:1">Page ${row*n+col+1}/${n*n} (R${row+1}C${col+1})</div><img src="${imgSrc}" style="position:absolute;left:${offX}%;top:${offY}%;width:${pctW}%;height:${pctH}%;object-fit:fill"/></div>`;
-          }
-          const printEl=document.createElement("div");printEl.id="zobuddy-print-overlay";
-          printEl.innerHTML=`<style>#zobuddy-print-overlay{position:fixed;inset:0;z-index:9999;background:#fff;overflow:auto}@media print{#zobuddy-print-overlay .no-print{display:none!important}#zobuddy-print-overlay{position:static}}</style>${tilesHtml}<div class="no-print" style="padding:12px;text-align:center;background:#fff"><div style="margin:8px 0;font-size:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center">${legendHtml}</div><button onclick="window.print()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">🖨️ Print ${n}×${n} Pages / Save PDF</button> <button onclick="document.getElementById('zobuddy-print-overlay').remove()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">✕ Close</button></div>`;
-          document.body.appendChild(printEl);
-        }} style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>🖨 Multi-Page</button>}
-        {vecSvg&&<button onClick={()=>{const blob=new Blob([vecSvg],{type:"image/svg+xml"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=(page.title||"vector")+".svg";a.click();URL.revokeObjectURL(url);}}
-          style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>💾 SVG</button>}
-        {vecPng&&<button onClick={()=>saveAsPng(vecPng,page.title||"flat-art")} style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>💾 PNG</button>}
+        }} style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>🖨</button>}
+        {vecPng&&<button onClick={()=>saveAsPng(vecPng,page.title||"flat-art")} style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>💾</button>}
         <button onClick={archiveCurrentPage} style={btn({color:"#888",padding:"3px 7px",fontSize:10})}>🗃️</button>
         <button onClick={deleteCurrentPage} style={btn({color:"#888",padding:"3px 7px",fontSize:10})}>🗑️</button>
       </div>
-      {/* Thread list — hidden until expanded */}
       {/* Crop UI */}
       {vecCropImg&&<div style={{position:"absolute",inset:0,zIndex:100,background:"rgba(0,0,0,.92)",display:"flex",flexDirection:"column",overflow:"auto"}}>
         <div style={{padding:"12px 16px",flexShrink:0}}>
@@ -7344,26 +7334,44 @@ const NotebookPanel=()=>{
           <button onClick={()=>setVecCropImg(null)} style={{padding:"10px 28px",borderRadius:10,background:"rgba(255,255,255,.06)",color:"#aaa",border:"1px solid rgba(255,255,255,.1)",fontSize:15,fontWeight:700,cursor:"pointer"}}>Cancel</button>
         </div>
       </div>}
-      {/* Draw toolbar — uses DMC palette from conversion */}
-      {vecDrawMode&&hasVecContent&&<div style={{display:"flex",flexDirection:"column",gap:3,padding:"2px 10px 4px",flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
-          <button onClick={()=>{saveVecDraw();vecDrawCanvasRef.current=null;setVecDrawMode(false);setVecEyedropper(false);}} style={btn({background:"rgba(102,126,234,.15)",border:"1px solid rgba(102,126,234,.3)",color:"#a8b4f0",padding:"3px 8px",fontSize:10})}>Done</button>
-          <button onClick={vecUndoDraw} style={btn({color:"#aaa",padding:"3px 8px",fontSize:10})}>↩</button>
-          <button onClick={vecRedoDraw} style={btn({color:"#aaa",padding:"3px 8px",fontSize:10})}>↪</button>
-          <button onClick={()=>{setVecDrawEraser(false);setVecEyedropper(e=>!e);}} style={btn(vecEyedropper?{background:"rgba(67,233,123,.2)",border:"1px solid rgba(67,233,123,.4)",color:"#43e97b",padding:"3px 8px",fontSize:10}:{padding:"3px 8px",fontSize:10,color:"#888"})}>💧</button>
-          <button onClick={()=>{setVecEyedropper(false);setVecDrawEraser(e=>!e);}} style={btn(vecDrawEraser?{background:"rgba(245,87,108,.2)",border:"1px solid rgba(245,87,108,.4)",color:"#f5576c",padding:"3px 8px",fontSize:10}:{padding:"3px 8px",fontSize:10,color:"#888"})}>{vecDrawEraser?<span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span>:"✏️"}</button>
-          {[2,4,8,14].map(s=><div key={s} onClick={()=>setVecDrawSize(s)} style={{width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:6,background:vecDrawSize===s?"rgba(255,255,255,.12)":"transparent",border:vecDrawSize===s?"1px solid "+vecDrawColor:"1px solid transparent",cursor:"pointer"}}><div style={{width:Math.max(s,2),height:Math.max(s,2),borderRadius:"50%",background:vecDrawEraser?"rgba(245,87,108,.7)":vecDrawColor}}/></div>)}
-          <div style={{width:18,height:18,borderRadius:4,background:vecDrawColor,border:"2px solid #feca57",flexShrink:0}}/>
-        </div>
-        {/* Quick colors from the conversion palette */}
-        <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
-          {vecColors.slice(0,24).map((c,i)=><div key={i} onClick={()=>{setVecDrawColor(c.color);setVecDrawEraser(false);setVecEyedropper(false);}} title={`DMC ${c.dmc?.n} ${c.dmc?.nm}`}
-            style={{width:22,height:22,borderRadius:4,background:c.color,border:vecDrawColor===c.color&&!vecDrawEraser?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer",boxSizing:"border-box"}}/>)}
-          {vecColors.length===0&&["#000000","#ffffff","#C72B3B","#13477D","#056517","#FF8313"].map(c=><div key={c} onClick={()=>{setVecDrawColor(c);setVecDrawEraser(false);setVecEyedropper(false);}} style={{width:22,height:22,borderRadius:4,background:c,border:vecDrawColor===c&&!vecDrawEraser?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer",boxSizing:"border-box"}}/>)}
-        </div>
+      {/* Row 3: Draw tools (always visible when content exists) */}
+      {hasVecContent&&<div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
+        <button onClick={vecUndoDraw} style={btn({color:"#aaa",padding:"3px 8px",fontSize:10})}>↩</button>
+        <button onClick={vecRedoDraw} style={btn({color:"#aaa",padding:"3px 8px",fontSize:10})}>↪</button>
+        <button onClick={()=>{setVecDrawEraser(false);setVecEyedropper(e=>!e);}} style={btn(vecEyedropper?{background:"rgba(67,233,123,.2)",border:"1px solid rgba(67,233,123,.4)",color:"#43e97b",padding:"3px 8px",fontSize:10}:{padding:"3px 8px",fontSize:10,color:"#888"})}>💧</button>
+        <button onClick={()=>{setVecEyedropper(false);setVecDrawEraser(e=>!e);}} style={btn(vecDrawEraser?{background:"rgba(245,87,108,.2)",border:"1px solid rgba(245,87,108,.4)",color:"#f5576c",padding:"3px 8px",fontSize:10}:{padding:"3px 8px",fontSize:10,color:"#888"})}>{vecDrawEraser?<span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span>:"✏️"}</button>
+        {[2,4,8,14].map(s=><div key={s} onClick={()=>setVecDrawSize(s)} style={{width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:6,background:vecDrawSize===s?"rgba(255,255,255,.12)":"transparent",border:vecDrawSize===s?"1px solid "+vecDrawColor:"1px solid transparent",cursor:"pointer"}}><div style={{width:Math.max(s,2),height:Math.max(s,2),borderRadius:"50%",background:vecDrawEraser?"rgba(245,87,108,.7)":vecDrawColor}}/></div>)}
+        <div style={{width:20,height:20,borderRadius:4,background:vecDrawColor,border:"2px solid #feca57",flexShrink:0}}/>
       </div>}
-      {/* Grid controls */}
-      {hasVecContent&&!vecDrawMode&&<div style={{display:"flex",alignItems:"center",gap:3,padding:"0 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
+      {/* Row 4: Color palette — gradient-sorted, expandable */}
+      {hasVecContent&&<div style={{padding:"0 10px 4px",flexShrink:0}}>
+        <div style={{display:"flex",gap:2,flexWrap:"wrap",alignItems:"center"}}>
+          {(vecPalExpanded?sortedColors:sortedColors.slice(0,8)).map((c,i)=><div key={i} onClick={()=>{setVecDrawColor(c.color);setVecDrawEraser(false);setVecEyedropper(false);}}
+            style={cSwatch(c.color,vecDrawColor===c.color&&!vecDrawEraser)}/>)}
+          {sortedColors.length>8&&!vecPalExpanded&&<button onClick={()=>setVecPalExpanded(true)}
+            style={{padding:"2px 6px",borderRadius:4,fontSize:9,fontWeight:700,border:"1px solid rgba(255,255,255,.1)",background:"rgba(255,255,255,.05)",color:"#888",cursor:"pointer"}}>+{sortedColors.length-8}</button>}
+          {vecPalExpanded&&sortedColors.length>8&&<button onClick={()=>setVecPalExpanded(false)}
+            style={{padding:"2px 6px",borderRadius:4,fontSize:9,fontWeight:700,border:"1px solid rgba(254,202,87,.3)",background:"rgba(254,202,87,.1)",color:"#feca57",cursor:"pointer"}}>▲</button>}
+          <button onClick={()=>setVecFullPalette(v=>!v)}
+            style={{padding:"2px 6px",borderRadius:4,fontSize:9,fontWeight:700,border:vecFullPalette?"1px solid rgba(240,147,251,.3)":"1px solid rgba(255,255,255,.1)",background:vecFullPalette?"rgba(240,147,251,.1)":"rgba(255,255,255,.05)",color:vecFullPalette?"#f093fb":"#888",cursor:"pointer"}}>{vecFullPalette?"▲ 400+":"🎨 400+"}</button>
+        </div>
+        {vecFullPalette&&<div style={{marginTop:4}}>
+          <input value={vecPaletteSearch} onChange={e=>setVecPaletteSearch(e.target.value)} placeholder="Search DMC # or name..." style={{width:"100%",padding:"4px 8px",borderRadius:6,border:"1px solid rgba(255,255,255,.12)",background:"rgba(255,255,255,.06)",color:"#e8e0f0",fontSize:11,outline:"none",marginBottom:4,boxSizing:"border-box"}}/>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(14,1fr)",gap:2,maxHeight:120,overflowY:"auto",overflowX:"hidden"}}>
+            {(vecPaletteSearch.trim()?PIXEL_PALETTE.filter(p=>{const q=vecPaletteSearch.toLowerCase();return p.n.toLowerCase().includes(q)||p.nm.toLowerCase().includes(q);}):PIXEL_PALETTE).map(p=>{
+              const lum=parseInt(p.c.slice(1,3),16)*.299+parseInt(p.c.slice(3,5),16)*.587+parseInt(p.c.slice(5,7),16)*.114;
+              return <div key={p.n+p.c} onClick={()=>{setVecDrawColor(p.c);setVecDrawEraser(false);setVecEyedropper(false);}} title={`DMC ${p.n} — ${p.nm}`}
+                style={{aspectRatio:"1",borderRadius:3,background:p.c,border:vecDrawColor===p.c&&!vecDrawEraser?"2px solid #feca57":lum<80?"1px solid rgba(255,255,255,.3)":"1px solid rgba(0,0,0,.15)",cursor:"pointer",minWidth:0}}/>;
+            })}
+          </div>
+        </div>}
+        {vecColors.length===0&&!vecFullPalette&&<div style={{display:"flex",gap:2,marginTop:3}}>
+          {["#000000","#ffffff","#C72B3B","#13477D","#056517","#FF8313"].map(c=><div key={c} onClick={()=>{setVecDrawColor(c);setVecDrawEraser(false);setVecEyedropper(false);}}
+            style={cSwatch(c,vecDrawColor===c&&!vecDrawEraser)}/>)}
+        </div>}
+      </div>}
+      {/* Row 5: Grid + 📷 opacity + Zoom */}
+      {hasVecContent&&<div style={{display:"flex",alignItems:"center",gap:3,padding:"0 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
         <span style={{fontSize:10,opacity:.4,fontWeight:700}}>Grid:</span>
         {[{v:0,l:"Off"},{v:5,l:"5"},{v:10,l:"10"},{v:20,l:"20"}].map(g=>(
           <button key={g.v} onClick={()=>setVecGrid(g.v)} style={{padding:"2px 5px",borderRadius:6,fontSize:10,fontWeight:700,border:vecGrid===g.v?"1px solid rgba(254,202,87,.5)":"1px solid rgba(255,255,255,.06)",background:vecGrid===g.v?"rgba(254,202,87,.12)":"transparent",color:vecGrid===g.v?"#feca57":"#666",cursor:"pointer"}}>{g.l}</button>))}
@@ -7371,16 +7379,13 @@ const NotebookPanel=()=>{
           <div style={{width:1,height:16,background:"rgba(255,255,255,.08)",margin:"0 2px"}}/>
           <span style={{fontSize:10,opacity:.4,fontWeight:700}}>📷</span>
           <input type="range" min="0" max="100" value={vecOrigOpacity*100} onChange={e=>setVecOrigOpacity(Number(e.target.value)/100)}
-            style={{width:60,height:4,accentColor:"#60a5fa",opacity:.7}}/>
-          <span style={{fontSize:9,opacity:.3,minWidth:24}}>{Math.round(vecOrigOpacity*100)}%</span>
+            style={{width:50,height:4,accentColor:"#60a5fa",opacity:.7}}/>
+          <span style={{fontSize:9,opacity:.3,minWidth:20}}>{Math.round(vecOrigOpacity*100)}%</span>
         </>}
-      </div>}
-      {/* Also show slider in draw mode */}
-      {hasVecContent&&vecDrawMode&&page.vectorOriginal&&<div style={{display:"flex",alignItems:"center",gap:3,padding:"0 10px 4px",flexShrink:0}}>
-        <span style={{fontSize:10,opacity:.4,fontWeight:700}}>📷 Original:</span>
-        <input type="range" min="0" max="100" value={vecOrigOpacity*100} onChange={e=>setVecOrigOpacity(Number(e.target.value)/100)}
-          style={{width:80,height:4,accentColor:"#60a5fa",opacity:.7}}/>
-        <span style={{fontSize:9,opacity:.3,minWidth:24}}>{Math.round(vecOrigOpacity*100)}%</span>
+        <div style={{flex:1}}/>
+        <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={btn({padding:"3px 7px",fontSize:11})}>−</button>
+        <span style={{fontSize:10,opacity:.4,minWidth:28,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
+        <button onClick={()=>setPageZoom(z=>Math.min(6,z+0.2))} style={btn({padding:"3px 7px",fontSize:11})}>+</button>
       </div>}
       {/* Image display with square grid overlay and draw canvas */}
       <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch",padding:12}}>
@@ -7413,8 +7418,8 @@ const NotebookPanel=()=>{
               </>}
             </svg>;
           })()}
-          {/* Draw overlay canvas */}
-          {vecDrawMode&&<canvas ref={(el)=>{if(el&&!vecDrawCanvasRef.current){vecDrawCanvasRef.current=el;
+          {/* Draw overlay canvas — always active */}
+          <canvas ref={(el)=>{if(el&&!vecDrawCanvasRef.current){vecDrawCanvasRef.current=el;
             const d=readNb();const dd=d.pages?.[pageIdxRef.current]?.vecDrawData;
             if(dd){const img2=new Image();img2.onload=()=>{el.getContext("2d").drawImage(img2,0,0);vecPushHistory();};img2.src=dd;}else{vecPushHistory();}
             const getXY=(e)=>{const r=el.getBoundingClientRect();return{x:(e.clientX-r.left)*el.width/r.width,y:(e.clientY-r.top)*el.height/r.height};};
@@ -7469,9 +7474,7 @@ const NotebookPanel=()=>{
               if(e.touches.length<2){pinching=false;lastPinchDist=0;}
               if(vecIsDrawing.current&&e.touches.length===0){vecIsDrawing.current=false;el.getContext("2d").globalCompositeOperation="source-over";vecPushHistory();saveVecDraw();}
             });
-          }}} width={800} height={800} style={{position:"absolute",inset:0,width:"100%",height:"100%",touchAction:"none",cursor:vecEyedropper?"crosshair":"default"}}/>}
-          {/* Show saved draw overlay when not in draw mode */}
-          {!vecDrawMode&&page.vecDrawData&&<img src={page.vecDrawData} style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}/>}
+          }}} width={800} height={800} style={{position:"absolute",inset:0,width:"100%",height:"100%",touchAction:"none",cursor:vecEyedropper?"crosshair":"default"}}/>
         </div>
         :<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flex:1,opacity:.3}}>
           <div style={{fontSize:48,marginBottom:12}}>✏️</div>
