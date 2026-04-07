@@ -6160,6 +6160,7 @@ const NotebookPanel=()=>{
   const[vecGrid,setVecGrid]=useState(0); // 0=off, 5,10,20 = grid divisions
   const[vecImgW,setVecImgW]=useState(800);
   const[vecImgH,setVecImgH]=useState(800);
+  const[vecOrigOpacity,setVecOrigOpacity]=useState(0); // 0 = hidden, 0.1-1 = visible
   const vecDrawCanvasRef=React.useRef(null);
   const vecDrawDataRef=React.useRef(null);
   const vecIsDrawing=React.useRef(false);
@@ -7208,7 +7209,7 @@ const NotebookPanel=()=>{
         setVecImporting(false);if(!result)return;
         vecSvgRef.current=result.svg;
         const d=readNb();const pi=pageIdxRef.current;
-        if(d.pages?.[pi]){d.pages[pi].vectorPng=result.pngUrl||"";d.pages[pi].vectorColors=result.colors;d.pages[pi].vecDrawData=null;delete d.pages[pi].vectorSvg;
+        if(d.pages?.[pi]){d.pages[pi].vectorPng=result.pngUrl||"";d.pages[pi].vectorColors=result.colors;d.pages[pi].vecDrawData=null;d.pages[pi].vectorOriginal=cc.toDataURL("image/png");delete d.pages[pi].vectorSvg;
           try{writeNb(d);setNbData({...d});}catch(err){alert("Save failed — try fewer colors.");}}
       });
     };ci2.src=src;
@@ -7366,6 +7367,20 @@ const NotebookPanel=()=>{
         <span style={{fontSize:10,opacity:.4,fontWeight:700}}>Grid:</span>
         {[{v:0,l:"Off"},{v:5,l:"5"},{v:10,l:"10"},{v:20,l:"20"}].map(g=>(
           <button key={g.v} onClick={()=>setVecGrid(g.v)} style={{padding:"2px 5px",borderRadius:6,fontSize:10,fontWeight:700,border:vecGrid===g.v?"1px solid rgba(254,202,87,.5)":"1px solid rgba(255,255,255,.06)",background:vecGrid===g.v?"rgba(254,202,87,.12)":"transparent",color:vecGrid===g.v?"#feca57":"#666",cursor:"pointer"}}>{g.l}</button>))}
+        {page.vectorOriginal&&<>
+          <div style={{width:1,height:16,background:"rgba(255,255,255,.08)",margin:"0 2px"}}/>
+          <span style={{fontSize:10,opacity:.4,fontWeight:700}}>📷</span>
+          <input type="range" min="0" max="100" value={vecOrigOpacity*100} onChange={e=>setVecOrigOpacity(Number(e.target.value)/100)}
+            style={{width:60,height:4,accentColor:"#60a5fa",opacity:.7}}/>
+          <span style={{fontSize:9,opacity:.3,minWidth:24}}>{Math.round(vecOrigOpacity*100)}%</span>
+        </>}
+      </div>}
+      {/* Also show slider in draw mode */}
+      {hasVecContent&&vecDrawMode&&page.vectorOriginal&&<div style={{display:"flex",alignItems:"center",gap:3,padding:"0 10px 4px",flexShrink:0}}>
+        <span style={{fontSize:10,opacity:.4,fontWeight:700}}>📷 Original:</span>
+        <input type="range" min="0" max="100" value={vecOrigOpacity*100} onChange={e=>setVecOrigOpacity(Number(e.target.value)/100)}
+          style={{width:80,height:4,accentColor:"#60a5fa",opacity:.7}}/>
+        <span style={{fontSize:9,opacity:.3,minWidth:24}}>{Math.round(vecOrigOpacity*100)}%</span>
       </div>}
       {/* Image display with square grid overlay and draw canvas */}
       <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch",padding:12}}>
@@ -7374,6 +7389,8 @@ const NotebookPanel=()=>{
             const img=e.target;img.dataset.natW=img.naturalWidth;img.dataset.natH=img.naturalHeight;
             setVecImgW(img.naturalWidth);setVecImgH(img.naturalHeight);
           }}/>
+          {/* Original photo overlay */}
+          {page.vectorOriginal&&vecOrigOpacity>0&&<img src={page.vectorOriginal} style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:vecOrigOpacity,pointerEvents:"none",mixBlendMode:"normal"}}/>}
           {/* Square grid overlay — true squares based on shorter dimension, dotted lines for partial edge cells */}
           {vecGrid>0&&(()=>{
             const natW=vecImgW,natH=vecImgH;
