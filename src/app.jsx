@@ -6958,7 +6958,7 @@ const NotebookPanel=()=>{
       {/* Row 1: Color palette — primaries, complements, neutrals + expand */}
       <div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px 4px",flexShrink:0,flexWrap:"wrap"}}>
         <button onClick={()=>setPixelEraser(e=>!e)} style={btn(pixelEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",boxShadow:"0 0 8px rgba(245,87,108,.3)",padding:"4px 8px"}:{color:"#ccc",padding:"4px 8px"})}>
-          {pixelEraser?"🧹":"✏️"}</button>
+          {pixelEraser?<span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span>:"✏️"}</button>
         <div style={{width:1,height:20,background:"rgba(255,255,255,.1)"}}/>
         {/* Primaries + complements + neutrals: Red,Blue,Yellow | Green,Orange,Purple | Black,Gray,White */}
         {[
@@ -7363,7 +7363,7 @@ const NotebookPanel=()=>{
           <button onClick={vecUndoDraw} style={btn({color:"#aaa",padding:"3px 8px",fontSize:10})}>↩</button>
           <button onClick={vecRedoDraw} style={btn({color:"#aaa",padding:"3px 8px",fontSize:10})}>↪</button>
           <button onClick={()=>{setVecDrawEraser(false);setVecEyedropper(e=>!e);}} style={btn(vecEyedropper?{background:"rgba(67,233,123,.2)",border:"1px solid rgba(67,233,123,.4)",color:"#43e97b",padding:"3px 8px",fontSize:10}:{padding:"3px 8px",fontSize:10,color:"#888"})}>💧</button>
-          <button onClick={()=>{setVecEyedropper(false);setVecDrawEraser(e=>!e);}} style={btn(vecDrawEraser?{background:"rgba(245,87,108,.2)",border:"1px solid rgba(245,87,108,.4)",color:"#f5576c",padding:"3px 8px",fontSize:10}:{padding:"3px 8px",fontSize:10,color:"#888"})}>{vecDrawEraser?"🧹":"✏️"}</button>
+          <button onClick={()=>{setVecEyedropper(false);setVecDrawEraser(e=>!e);}} style={btn(vecDrawEraser?{background:"rgba(245,87,108,.2)",border:"1px solid rgba(245,87,108,.4)",color:"#f5576c",padding:"3px 8px",fontSize:10}:{padding:"3px 8px",fontSize:10,color:"#888"})}>{vecDrawEraser?<span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span>:"✏️"}</button>
           {[2,4,8,14].map(s=><div key={s} onClick={()=>setVecDrawSize(s)} style={{width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:6,background:vecDrawSize===s?"rgba(255,255,255,.12)":"transparent",border:vecDrawSize===s?"1px solid "+vecDrawColor:"1px solid transparent",cursor:"pointer"}}><div style={{width:Math.max(s,2),height:Math.max(s,2),borderRadius:"50%",background:vecDrawEraser?"rgba(245,87,108,.7)":vecDrawColor}}/></div>)}
           <div style={{width:18,height:18,borderRadius:4,background:vecDrawColor,border:"2px solid #feca57",flexShrink:0}}/>
         </div>
@@ -7381,21 +7381,33 @@ const NotebookPanel=()=>{
           <button key={g.v} onClick={()=>setVecGrid(g.v)} style={{padding:"2px 5px",borderRadius:6,fontSize:10,fontWeight:700,border:vecGrid===g.v?"1px solid rgba(254,202,87,.5)":"1px solid rgba(255,255,255,.06)",background:vecGrid===g.v?"rgba(254,202,87,.12)":"transparent",color:vecGrid===g.v?"#feca57":"#666",cursor:"pointer"}}>{g.l}</button>))}
       </div>}
       {/* Image display with square grid overlay and draw canvas */}
-      <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:12}}>
-        {hasVecContent?<div style={{position:"relative",transform:`scale(${pageZoom})`,transformOrigin:"top center",display:"inline-block"}}>
+      <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch",padding:12}}>
+        {hasVecContent?<div style={{position:"relative",transform:`scale(${pageZoom})`,transformOrigin:"top left",display:"inline-block",marginBottom:pageZoom>1?`${(pageZoom-1)*100}%`:0,marginRight:pageZoom>1?`${(pageZoom-1)*100}%`:0}}>
           <img ref={(el)=>{if(el)el._vecImg=true;}} src={vecPng} style={{maxWidth:"100%",height:"auto",display:"block",imageRendering:"auto"}} onLoad={(e)=>{
             // Store natural dimensions for square grid calc
             const img=e.target;img.dataset.natW=img.naturalWidth;img.dataset.natH=img.naturalHeight;
           }}/>
-          {/* Square grid overlay — uses the shorter dimension to create equal squares */}
+          {/* Square grid overlay — true squares based on shorter dimension, dotted lines for partial edge cells */}
           {vecGrid>0&&(()=>{
             const imgEl=document.querySelector("img[data-nat-w]");
             const natW=Number(imgEl?.dataset?.natW||800),natH=Number(imgEl?.dataset?.natH||800);
             const cellSize=Math.min(natW,natH)/vecGrid;
             const cols=Math.floor(natW/cellSize),rows=Math.floor(natH/cellSize);
+            const remX=natW-cols*cellSize,remY=natH-rows*cellSize;
             return <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}} viewBox={`0 0 ${natW} ${natH}`} preserveAspectRatio="none">
-              {Array.from({length:cols-1},(_,i)=><line key={"v"+i} x1={cellSize*(i+1)} y1="0" x2={cellSize*(i+1)} y2={natH} stroke="rgba(255,255,255,.4)" strokeWidth="1"/>)}
-              {Array.from({length:rows-1},(_,i)=><line key={"h"+i} x1="0" y1={cellSize*(i+1)} x2={natW} y2={cellSize*(i+1)} stroke="rgba(255,255,255,.4)" strokeWidth="1"/>)}
+              {/* Solid grid lines for full squares */}
+              {Array.from({length:cols-1},(_,i)=><line key={"v"+i} x1={cellSize*(i+1)} y1="0" x2={cellSize*(i+1)} y2={rows*cellSize} stroke="rgba(255,255,255,.4)" strokeWidth="1"/>)}
+              {Array.from({length:rows-1},(_,i)=><line key={"h"+i} x1="0" y1={cellSize*(i+1)} x2={cols*cellSize} y2={cellSize*(i+1)} stroke="rgba(255,255,255,.4)" strokeWidth="1"/>)}
+              {/* Dotted extension lines for partial edge columns */}
+              {remX>2&&<>
+                <line x1={cols*cellSize} y1="0" x2={cols*cellSize} y2={rows*cellSize} stroke="rgba(255,255,255,.5)" strokeWidth="1" strokeDasharray="4,3"/>
+                {Array.from({length:rows-1},(_,i)=><line key={"he"+i} x1={cols*cellSize} y1={cellSize*(i+1)} x2={natW} y2={cellSize*(i+1)} stroke="rgba(255,255,255,.3)" strokeWidth="1" strokeDasharray="3,3"/>)}
+              </>}
+              {/* Dotted extension lines for partial edge rows */}
+              {remY>2&&<>
+                <line x1="0" y1={rows*cellSize} x2={cols*cellSize} y2={rows*cellSize} stroke="rgba(255,255,255,.5)" strokeWidth="1" strokeDasharray="4,3"/>
+                {Array.from({length:cols-1},(_,i)=><line key={"ve"+i} x1={cellSize*(i+1)} y1={rows*cellSize} x2={cellSize*(i+1)} y2={natH} stroke="rgba(255,255,255,.3)" strokeWidth="1" strokeDasharray="3,3"/>)}
+              </>}
             </svg>;
           })()}
           {/* Draw overlay canvas */}
@@ -7404,16 +7416,20 @@ const NotebookPanel=()=>{
             if(dd){const img2=new Image();img2.onload=()=>{el.getContext("2d").drawImage(img2,0,0);vecPushHistory();};img2.src=dd;}else{vecPushHistory();}
             const getXY=(e)=>{const r=el.getBoundingClientRect();return{x:(e.clientX-r.left)*el.width/r.width,y:(e.clientY-r.top)*el.height/r.height};};
             let pinching=false;let lastPinchDist=0;let lastPinchMidX=0;let lastPinchMidY=0;
+            let pendingDown=null;let startPos=null;
             const scrollParent=()=>{let p=el.parentElement;while(p){if(p.scrollHeight>p.clientHeight||p.scrollWidth>p.clientWidth)return p;p=p.parentElement;}return null;};
             el.addEventListener("touchstart",(e)=>{
-              if(e.touches.length>=2){pinching=true;vecIsDrawing.current=false;
+              if(e.touches.length>=2){
+                // Cancel any pending draw start
+                if(pendingDown){clearTimeout(pendingDown);pendingDown=null;}
+                vecIsDrawing.current=false;pinching=true;
                 const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
                 lastPinchDist=Math.sqrt(dx*dx+dy*dy);
                 lastPinchMidX=(e.touches[0].clientX+e.touches[1].clientX)/2;
                 lastPinchMidY=(e.touches[0].clientY+e.touches[1].clientY)/2;
                 e.preventDefault();return;}
               if(e.touches.length===1&&!pinching){
-                e.preventDefault();const p=getXY(e.touches[0]);
+                e.preventDefault();const p=getXY(e.touches[0]);startPos=p;
                 if(vecEyedropperRef.current){
                   const baseImg=el.parentElement?.querySelector("img");if(baseImg){
                     const tc2=document.createElement("canvas");tc2.width=baseImg.naturalWidth||800;tc2.height=baseImg.naturalHeight||800;
@@ -7422,16 +7438,23 @@ const NotebookPanel=()=>{
                     const px=tc2.getContext("2d").getImageData(ix,iy,1,1).data;
                     setVecDrawColor("#"+[px[0],px[1],px[2]].map(v=>v.toString(16).padStart(2,"0")).join(""));setVecEyedropper(false);
                   }return;}
-                vecIsDrawing.current=true;const ctx=el.getContext("2d");
-                const col=vecDrawColorRef.current,sz=vecDrawSizeRef.current,erasing=vecDrawEraserRef.current;
-                if(erasing){ctx.globalCompositeOperation="destination-out";ctx.lineWidth=sz*3;}
-                else{ctx.globalCompositeOperation="source-over";ctx.strokeStyle=col;ctx.lineWidth=sz;}
-                ctx.lineCap="round";ctx.lineJoin="round";ctx.beginPath();ctx.moveTo(p.x,p.y);
-                ctx.beginPath();ctx.arc(p.x,p.y,erasing?sz*1.5:sz/2,0,Math.PI*2);ctx.fillStyle=erasing?"rgba(0,0,0,1)":col;ctx.fill();ctx.beginPath();ctx.moveTo(p.x,p.y);
+                // Delay draw start to allow second finger for pinch/pan
+                pendingDown=setTimeout(()=>{
+                  pendingDown=null;
+                  vecIsDrawing.current=true;const ctx=el.getContext("2d");
+                  const col=vecDrawColorRef.current,sz=vecDrawSizeRef.current,erasing=vecDrawEraserRef.current;
+                  if(erasing){ctx.globalCompositeOperation="destination-out";ctx.lineWidth=sz*3;}
+                  else{ctx.globalCompositeOperation="source-over";ctx.strokeStyle=col;ctx.lineWidth=sz;}
+                  ctx.lineCap="round";ctx.lineJoin="round";
+                  ctx.beginPath();ctx.arc(startPos.x,startPos.y,erasing?sz*1.5:sz/2,0,Math.PI*2);ctx.fillStyle=erasing?"rgba(0,0,0,1)":col;ctx.fill();ctx.beginPath();ctx.moveTo(startPos.x,startPos.y);
+                },120);
               }
             },{passive:false});
             el.addEventListener("touchmove",(e)=>{
-              if(e.touches.length>=2){e.preventDefault();
+              if(e.touches.length>=2){
+                if(pendingDown){clearTimeout(pendingDown);pendingDown=null;}
+                vecIsDrawing.current=false;pinching=true;
+                e.preventDefault();
                 const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
                 const dist=Math.sqrt(dx*dx+dy*dy);
                 const midX=(e.touches[0].clientX+e.touches[1].clientX)/2;
@@ -7442,12 +7465,36 @@ const NotebookPanel=()=>{
                 const sp=scrollParent();
                 if(sp){sp.scrollLeft-=(midX-lastPinchMidX);sp.scrollTop-=(midY-lastPinchMidY);}
                 lastPinchDist=dist;lastPinchMidX=midX;lastPinchMidY=midY;return;}
+              // Flush pending draw on first move (single finger drag)
+              if(pendingDown&&e.touches.length===1){
+                clearTimeout(pendingDown);pendingDown=null;
+                vecIsDrawing.current=true;const ctx=el.getContext("2d");vecPushHistory();
+                const col=vecDrawColorRef.current,sz=vecDrawSizeRef.current,erasing=vecDrawEraserRef.current;
+                if(erasing){ctx.globalCompositeOperation="destination-out";ctx.lineWidth=sz*3;}
+                else{ctx.globalCompositeOperation="source-over";ctx.strokeStyle=col;ctx.lineWidth=sz;}
+                ctx.lineCap="round";ctx.lineJoin="round";
+                if(startPos){ctx.beginPath();ctx.moveTo(startPos.x,startPos.y);}
+              }
               if(!vecIsDrawing.current||pinching)return;e.preventDefault();
               const p=getXY(e.touches[0]);const ctx=el.getContext("2d");ctx.lineTo(p.x,p.y);ctx.stroke();
             },{passive:false});
             el.addEventListener("touchend",(e)=>{
-              if(e.touches.length<2)pinching=false;
+              if(e.touches.length<2){pinching=false;lastPinchDist=0;}
+              // Flush pending dot for single tap
+              if(pendingDown&&e.touches.length===0){
+                clearTimeout(pendingDown);pendingDown=null;
+                if(startPos){
+                  const ctx=el.getContext("2d");vecPushHistory();
+                  const col=vecDrawColorRef.current,sz=vecDrawSizeRef.current,erasing=vecDrawEraserRef.current;
+                  if(erasing){ctx.globalCompositeOperation="destination-out";}
+                  else{ctx.globalCompositeOperation="source-over";ctx.fillStyle=col;}
+                  ctx.beginPath();ctx.arc(startPos.x,startPos.y,erasing?sz*1.5:sz/2,0,Math.PI*2);ctx.fill();
+                  ctx.globalCompositeOperation="source-over";
+                  vecPushHistory();saveVecDraw();
+                }
+              }
               if(vecIsDrawing.current&&e.touches.length===0){vecIsDrawing.current=false;el.getContext("2d").globalCompositeOperation="source-over";vecPushHistory();saveVecDraw();}
+              startPos=null;
             });
           }}} width={800} height={800} style={{position:"absolute",inset:0,width:"100%",height:"100%",touchAction:"none",cursor:vecEyedropper?"crosshair":"default"}}/>}
           {/* Show saved draw overlay when not in draw mode */}
@@ -7761,7 +7808,7 @@ const NotebookPanel=()=>{
         <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
           <button onClick={()=>{saveAll();setPageDrawMode(false);}} style={btn({background:"rgba(102,126,234,.15)",border:"1px solid rgba(102,126,234,.3)",color:"#a8b4f0",padding:"4px 8px"})}>🔡</button>
           <button onClick={()=>setDrawEraser(e=>!e)} style={btn(drawEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",padding:"4px 8px"}:{color:"#ccc",padding:"4px 8px"})}>
-            {drawEraser?"🧹":"✏️"}</button>
+            {drawEraser?<span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span>:"✏️"}</button>
           <div style={{width:1,height:20,background:"rgba(255,255,255,.1)"}}/>
           {[
             {c:"#FFFFFF",l:"White"},{c:"#000000",l:"Black"},{c:"#8C8C8C",l:"Gray"},
