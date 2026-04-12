@@ -6164,6 +6164,7 @@ const NotebookPanel=()=>{
   const[vecOrigOpacity,setVecOrigOpacity]=useState(0); // 0 = hidden, 0.1-1 = visible
   const[vecPalExpanded,setVecPalExpanded]=useState(false);
   const vecSvgRef=React.useRef("");
+  const artScrollRef=React.useRef(null);
   const vecDrawCanvasRef=React.useRef(null);
   const vecDrawDataRef=React.useRef(null);
   const vecIsDrawing=React.useRef(false);
@@ -7451,7 +7452,7 @@ const NotebookPanel=()=>{
       </div>}
 
       {/* Main image area */}
-      <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch",display:"flex",alignItems:artStyle==="pixel"?"flex-start":"center",justifyContent:"center",padding:artStyle==="pixel"?0:8}}>
+      <div ref={(el)=>{artScrollRef.current=el;if(el)pixScrollRef.current=el;}} style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch",display:"flex",alignItems:artStyle==="pixel"?"flex-start":"center",justifyContent:"center",padding:artStyle==="pixel"?0:8}}>
         {artStyle==="pixel"&&<div style={{transform:`scale(${pageZoom})`,transformOrigin:"top left",width:cW/pageZoom,height:cH/pageZoom,minWidth:cW,minHeight:cH}}>
           <canvas ref={pixCanvasCallbackRef} width={cW} height={cH} style={{width:cW,height:cH,touchAction:"none",cursor:"crosshair",display:"block",imageRendering:"pixelated"}}/>
         </div>}
@@ -7699,7 +7700,7 @@ const NotebookPanel=()=>{
       {/* Bottom row: zoom + actions */}
       <div style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px 8px",flexShrink:0}}>
         <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={tbtn({padding:"6px 10px"})}>−</button>
-        <button onClick={()=>{setPageZoom(1);}} style={{background:"none",border:"none",fontSize:11,color:pageZoom!==1?"#feca57":"rgba(255,255,255,.4)",fontWeight:pageZoom!==1?700:400,minWidth:36,textAlign:"center",cursor:"pointer",padding:"6px 4px"}}>{Math.round(pageZoom*100)}%</button>
+        <button onClick={()=>{setPageZoom(1);const sc=artScrollRef.current;if(sc){sc.scrollTop=0;sc.scrollLeft=0;}}} style={{background:"none",border:"none",fontSize:11,color:pageZoom!==1?"#feca57":"rgba(255,255,255,.4)",fontWeight:pageZoom!==1?700:400,minWidth:36,textAlign:"center",cursor:"pointer",padding:"6px 4px"}}>{Math.round(pageZoom*100)}%</button>
         <button onClick={()=>setPageZoom(z=>Math.min(6,z+0.2))} style={tbtn({padding:"6px 10px"})}>+</button>
         <div style={{flex:1}}/>
         {artStyle==="pixel"&&<button onClick={()=>{if(!confirm("Clear all pixels?"))return;const d2=readNb();if(d2.pages?.[nbPageIdx]){d2.pages[nbPageIdx].pixels={};writeNb(d2);drawPixelGrid();}}}
