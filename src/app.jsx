@@ -6658,7 +6658,13 @@ const NotebookPanel=()=>{
         const nearSub=(r,g,b)=>{let bi=0,bd=Infinity;subRgb.forEach(([pr,pg,pb],i)=>{const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bd){bd=d;bi=i;}});return subPal[bi];};
         for(let row=0;row<dims.r;row++)for(let col=0;col<dims.c;col++){const idx=(row*dims.c+col)*4;const r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];if(a<30)continue;newPixels[`${row}-${col}`]=nearSub(r,g,b);}}
       const d=readNb();const pi=pageIdxRef.current;
-      if(d.pages?.[pi]){d.pages[pi].pixels=newPixels;d.pages[pi].pixOriginal=canvasToJpeg(tc,0.6);
+      if(d.pages?.[pi]){d.pages[pi].pixels=newPixels;
+        // Save a higher-res version of the cropped photo for overlay (not the tiny grid-sized one)
+        const origMaxDim=400;const origScale=Math.min(1,origMaxDim/Math.max(sw,sh));
+        const origW=Math.round(sw*origScale),origH=Math.round(sh*origScale);
+        const origC=document.createElement("canvas");origC.width=origW;origC.height=origH;
+        const origCtx=origC.getContext("2d");origCtx.drawImage(img,sx,sy,sw,sh,0,0,origW,origH);
+        d.pages[pi].pixOriginal=canvasToJpeg(origC,0.6);
         try{writeNb(d);setNbData({...d});}catch(e){alert("Save failed: "+e.message);}
       }else{alert("Page not found at index "+pi);}
       setTimeout(drawPixelGrid,50);setPixImporting(false);setPixImgCrop(null);
