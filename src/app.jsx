@@ -6618,7 +6618,7 @@ const NotebookPanel=()=>{
     const dataUrl=tc.toDataURL("image/png");
     const win=window.open("","_blank");
     if(win){const legendHtml=ranked.map(([color,count],i)=>{const p=PIXEL_PALETTE.find(p=>p.c===color);const label=p?`DMC ${p.n} — ${p.nm}`:`Custom`;return`<span style="display:inline-flex;align-items:center;gap:4px;margin:2px 0"><span style="width:16px;height:16px;border-radius:3px;background:${color};border:1px solid #ccc;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:${parseInt(color.slice(1,3),16)*.299+parseInt(color.slice(3,5),16)*.587+parseInt(color.slice(5,7),16)*.114>128?'#000':'#fff'}">${i+1}</span><b>#${i+1}</b> ${label} <span style="color:#888">(${count} px)</span></span>`;}).join("");
-      win.document.write(`<html><head><title>Pixel Art - Flat Art</title><style>@media print{body{margin:0}img{width:100%;height:auto;}}</style></head><body style="margin:0;background:#fff;display:flex;flex-direction:column;align-items:center;padding:8px"><h3 style="margin:4px 0;font-family:sans-serif">${nbData.pages[nbPageIdx]?.title||"Pixel Art"} — Flat Art</h3><img src="${dataUrl}" style="max-width:100%;height:auto"/><div style="margin:8px 0;font-family:sans-serif;font-size:12px;display:flex;flex-wrap:wrap;gap:10px">${legendHtml}</div><button onclick="window.print()" style="padding:10px 30px;font-size:16px;margin:8px;cursor:pointer">🖨️ Print</button></body></html>`);win.document.close();}
+      win.document.write(`<html><head><title>Pixel Art</title><style>@media print{body{margin:0}img{width:100%;height:auto;}}</style></head><body style="margin:0;background:#fff;display:flex;flex-direction:column;align-items:center;padding:8px"><h3 style="margin:4px 0;font-family:sans-serif">${nbData.pages[nbPageIdx]?.title||"Pixel Art"}</h3><img src="${dataUrl}" style="max-width:100%;height:auto"/><div style="margin:8px 0;font-family:sans-serif;font-size:12px;display:flex;flex-wrap:wrap;gap:10px">${legendHtml}</div><button onclick="window.print()" style="padding:10px 30px;font-size:16px;margin:8px;cursor:pointer">🖨️ Print</button></body></html>`);win.document.close();}
   };
   // ─── IMAGE TO PIXEL ART ────────────────────────────────────────
   const[pixImporting,setPixImporting]=useState(false);
@@ -7660,7 +7660,7 @@ const NotebookPanel=()=>{
                   style={{...cSwatch(color,pixelColor===color&&!pixelEraser,30),display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
                   <span style={{fontSize:7,fontWeight:800,color:lum>128?"rgba(0,0,0,.6)":"rgba(255,255,255,.7)",lineHeight:1,textAlign:"center"}}>{pm?pm.n:""}</span>
                 </div>);})}
-                  {ranked.length>12&&<span style={{fontSize:9,opacity:.3,fontWeight:700}}>+{ranked.length-12}</span>}
+                  {ranked.length>12&&<button onClick={()=>{setShowPixPicker(v=>!v);setPixPaletteSearch("");}} style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,fontSize:9,color:"#a8b4f0",fontWeight:700,cursor:"pointer",padding:"4px 6px"}}>+{ranked.length-12}</button>}
                 </>;
               }
               return [
@@ -7693,7 +7693,7 @@ const NotebookPanel=()=>{
       {/* Full DMC palette (pixel) */}
       {artStyle==="pixel"&&showPixPicker&&<div style={{padding:"4px 10px 4px",flexShrink:0}}>
         <input value={pixPaletteSearch} onChange={e=>setPixPaletteSearch(e.target.value)} placeholder="Search DMC # or color name..." style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid rgba(255,255,255,.12)",background:"rgba(255,255,255,.06)",color:"#e8e0f0",fontSize:11,outline:"none",marginBottom:4,boxSizing:"border-box"}}/>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gap:2,maxHeight:160,overflowY:"auto",overflowX:"hidden"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gap:2,maxHeight:90,overflowY:"auto",overflowX:"hidden"}}>
           {(pixPaletteSearch.trim()?PIXEL_PALETTE.filter(p=>{const q=pixPaletteSearch.toLowerCase();return p.n.toLowerCase().includes(q)||p.nm.toLowerCase().includes(q);}):PIXEL_PALETTE).map(p=>(<div key={p.n+p.c} onClick={()=>{setPixelColor(p.c);setPixelEraser(false);}} title={`DMC ${p.n} — ${p.nm}`}
             style={{position:"relative",aspectRatio:"1",borderRadius:3,background:p.c,border:pixelColor===p.c&&!pixelEraser?"2px solid #feca57":(parseInt(p.c.slice(1,3),16)*.299+parseInt(p.c.slice(3,5),16)*.587+parseInt(p.c.slice(5,7),16)*.114)<80?"1px solid rgba(255,255,255,.35)":"1px solid rgba(0,0,0,.15)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",minWidth:0}}>
             <span style={{fontSize:6,fontWeight:700,color:(parseInt(p.c.slice(1,3),16)*.299+parseInt(p.c.slice(3,5),16)*.587+parseInt(p.c.slice(5,7),16)*.114)>128?"rgba(0,0,0,.5)":"rgba(255,255,255,.6)",lineHeight:1,textAlign:"center",overflow:"hidden"}}>{p.n}</span>
