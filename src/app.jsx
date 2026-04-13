@@ -7176,10 +7176,10 @@ const NotebookPanel=()=>{
       const outCanvas=document.createElement("canvas");outCanvas.width=w;outCanvas.height=h;
       const octx=outCanvas.getContext("2d");
       const votes=new Map();
+      // First pass: determine each triangle's nearest DMC color and count votes
+      const triColors=[];
       tris.forEach(t=>{
         const pa=gridPts[t.a],pb=gridPts[t.b],pc=gridPts[t.c];
-        const cx2=(pa.x+pb.x+pc.x)/3,cy2=(pa.y+pb.y+pc.y)/3;
-        // Sample multiple points inside triangle for better color
         let sr=0,sg=0,sb=0,sc=0;
         for(let s=0;s<5;s++){
           const r1=Math.random(),r2s=Math.random();
@@ -7189,13 +7189,32 @@ const NotebookPanel=()=>{
           const ix=Math.max(0,Math.min(w-1,Math.floor(sx))),iy=Math.max(0,Math.min(h-1,Math.floor(sy)));
           const idx=(iy*w+ix)*4;sr+=data[idx];sg+=data[idx+1];sb+=data[idx+2];sc++;
         }
-        if(sc===0)return;sr/=sc;sg/=sc;sb/=sc;
-        const ci=nearFull(sr,sg,sb);votes.set(ci,(votes.get(ci)||0)+1);
-        octx.fillStyle=fullPal[ci];octx.strokeStyle=fullPal[ci];octx.lineWidth=0.5;octx.lineJoin="round";
+        if(sc===0){triColors.push(-1);return;}sr/=sc;sg/=sc;sb/=sc;
+        const ci=nearFull(sr,sg,sb);triColors.push(ci);votes.set(ci,(votes.get(ci)||0)+1);
+      });
+      // Build limited palette: pick top N colors, remap the rest
+      const topN2=[...votes.entries()].sort((a,b)=>b[1]-a[1]).slice(0,colorCount===0?votes.size:colorCount);
+      const allowedSet2=new Set(topN2.map(e=>e[0]));
+      const remap2=new Map();
+      // For each color not in top N, find nearest allowed color
+      votes.forEach((_,ci)=>{
+        if(allowedSet2.has(ci)){remap2.set(ci,ci);return;}
+        let bd=Infinity,bi=topN2[0][0];const[cr,cg,cb]=fullRgb[ci];
+        topN2.forEach(([ai])=>{const[ar,ag,ab]=fullRgb[ai];const d2=(cr-ar)**2+(cg-ag)**2+(cb-ab)**2;if(d2<bd){bd=d2;bi=ai;}});
+        remap2.set(ci,bi);
+      });
+      // Second pass: render triangles with remapped colors
+      const finalVotes2=new Map();
+      tris.forEach((t,ti)=>{
+        const pa=gridPts[t.a],pb=gridPts[t.b],pc=gridPts[t.c];
+        const ci=triColors[ti];if(ci<0)return;
+        const remapped=remap2.get(ci)??ci;
+        finalVotes2.set(remapped,(finalVotes2.get(remapped)||0)+1);
+        octx.fillStyle=fullPal[remapped];octx.strokeStyle=fullPal[remapped];octx.lineWidth=0.5;octx.lineJoin="round";
         octx.beginPath();octx.moveTo(pa.x,pa.y);octx.lineTo(pb.x,pb.y);octx.lineTo(pc.x,pc.y);octx.closePath();octx.fill();octx.stroke();
       });
       const pngUrl=outCanvas.toDataURL("image/jpeg",0.85);
-      const topColors=[...votes.entries()].sort((a,b)=>b[1]-a[1]).slice(0,colorCount===0?votes.size:colorCount);
+      const topColors=[...finalVotes2.entries()].sort((a,b)=>b[1]-a[1]);
       const colorInfo=topColors.map(([ci,count])=>({color:fullPal[ci],dmc:PIXEL_PALETTE[ci],count}));
       callback({pngUrl,width:w,height:h,colors:colorInfo});
       }catch(err){alert("Error: "+err.message);callback(null);}
