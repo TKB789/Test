@@ -8754,8 +8754,8 @@ function DayPlanner({plannerData,plannerViewDate,setPlannerViewDate,MOODS,getPla
     if(typeof v==="object"&&v!==null)return Object.values(v).filter(Boolean).length;
     return v?7:0;
   };
-  const DAYS_SHORT=["M","T","W","T","F","S","S"];
-  const DAYS_FULL=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const DAYS_SHORT=["S","M","T","W","T","F","S"];
+  const DAYS_FULL=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const toggleWeekly=(weekKey,roomDay,taskIdx)=>{
     setCleanData(p=>{
       const mo={...getCleanMonth(),...p[monthKey]};
@@ -8813,15 +8813,15 @@ function DayPlanner({plannerData,plannerViewDate,setPlannerViewDate,MOODS,getPla
     alert(`✅ ${undone.length} unfinished task${undone.length>1?"s":""} carried to next month!`);
   };
 
-  // Build week list for current month view
+  // Build week list for current month view (Sunday-start)
   const weeksInMonth=useMemo(()=>{
     const weeks=[];
     const first=new Date(cleanMonth.y,cleanMonth.m,1);
     const last=new Date(cleanMonth.y,cleanMonth.m+1,0);
-    // Advance to the Monday on or before the first of the month
+    // Advance to the Sunday on or before the first of the month
     const cur=new Date(first);
     const dow=cur.getDay(); // 0=Sun,1=Mon,...
-    cur.setDate(cur.getDate() - (dow===0?6:dow-1));
+    cur.setDate(cur.getDate() - dow);
     while(cur<=last){
       const wStart=new Date(cur);
       const label=`Week of ${wStart.toLocaleDateString("en-US",{month:"short",day:"numeric"})}`;
@@ -8832,14 +8832,34 @@ function DayPlanner({plannerData,plannerViewDate,setPlannerViewDate,MOODS,getPla
     return weeks;
   },[cleanMonth]);
 
-  const[openWeek,setOpenWeek]=useState(()=>toDateStr(new Date(new Date().getFullYear(),new Date().getMonth(),1)));
+  const[openWeek,setOpenWeek]=useState(()=>{const now=new Date();const d=new Date(now);d.setDate(d.getDate()-d.getDay());return toDateStr(d);});
   const[newCustom,setNewCustom]=useState("");
   const[showCarryConfirm,setShowCarryConfirm]=useState(false);
 
+  // ── Customizable task lists for Cleaning ──
+  const CLEAN_CUSTOM_KEY="zodibuddy_clean_custom_v1";
+  const defaultCleanTasks={
+    daily:DAILY_TASKS.map(t=>({...t})),
+    weekly:WEEKLY_ROOMS.map(r=>({...r,tasks:[...r.tasks]})),
+    monthly:MONTHLY_TASKS.map(t=>({...t}))
+  };
+  const[cleanCustomTasks,setCleanCustomTasks]=useState(()=>{
+    try{const s=ZobuddyDB.get(CLEAN_CUSTOM_KEY);return s?JSON.parse(s):defaultCleanTasks;}catch{return defaultCleanTasks;}
+  });
+  useEffect(()=>{try{ZobuddyDB.set(CLEAN_CUSTOM_KEY,JSON.stringify(cleanCustomTasks));}catch{}},[cleanCustomTasks]);
+  const[cleanEditMode,setCleanEditMode]=useState(null); // "daily"|"weekly"|"monthly"|null
+  const[cleanEditingItem,setCleanEditingItem]=useState(null); // {section,index,value} or {section,groupIdx,taskIdx,value}
+  const[cleanNewItemText,setCleanNewItemText]=useState("");
+  const[cleanNewWeeklyTask,setCleanNewWeeklyTask]=useState("");
+
+  const activeDailyTasks=cleanCustomTasks.daily||defaultCleanTasks.daily;
+  const activeWeeklyRooms=cleanCustomTasks.weekly||defaultCleanTasks.weekly;
+  const activeMonthlyTasks=cleanCustomTasks.monthly||defaultCleanTasks.monthly;
+
   const MONTH_NAMES=["January","February","March","April","May","June","July","August","September","October","November","December"];
   const moData=getCleanMonth();
-  const monthlyDone=MONTHLY_TASKS.filter(t=>moData.monthly[t.id]).length+((moData.customMonthly||[]).filter(t=>t.done).length);
-  const monthlyTotal=MONTHLY_TASKS.length+(moData.customMonthly||[]).length;
+  const monthlyDone=activeMonthlyTasks.filter(t=>moData.monthly[t.id]).length+((moData.customMonthly||[]).filter(t=>t.done).length);
+  const monthlyTotal=activeMonthlyTasks.length+(moData.customMonthly||[]).length;
 
   const fmtDisplayDate=(d)=>{
     const dt=new Date(d+"T12:00:00");
@@ -9368,11 +9388,51 @@ function DayPlanner({plannerData,plannerViewDate,setPlannerViewDate,MOODS,getPla
 
         {/* ── DAILY section with day-of-week columns ── */}
         <div style={{marginBottom:14}}>
-          <div style={{fontSize:14,fontWeight:900,opacity:.4,letterSpacing:1,marginBottom:8}}>EVERYDAY</div>
+          <div style={{display:"flex",alignItems:"center",marginBottom:8}}>
+            <div style={{fontSize:14,fontWeight:900,opacity:.4,letterSpacing:1,flex:1}}>EVERYDAY</div>
+            <button onClick={()=>setCleanEditMode(cleanEditMode==="daily"?null:"daily")}
+              style={{background:cleanEditMode==="daily"?"rgba(102,126,234,.2)":"rgba(255,255,255,.06)",border:`1px solid ${cleanEditMode==="daily"?"rgba(102,126,234,.4)":"rgba(255,255,255,.1)"}`,borderRadius:6,padding:"3px 8px",fontSize:12,color:cleanEditMode==="daily"?"#667eea":"#aaa",cursor:"pointer",fontWeight:700}}>
+              {cleanEditMode==="daily"?"Done":"✎ Edit"}
+            </button>
+          </div>
+
+          {cleanEditMode==="daily"&&<div style={{background:"rgba(102,126,234,.06)",border:"1px solid rgba(102,126,234,.15)",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
+            {activeDailyTasks.map((t,idx)=>(
+              <div key={idx} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,.04)"}}>
+                {cleanEditingItem?.section==="daily"&&cleanEditingItem?.index===idx
+                  ?<>
+                    <input value={cleanEditingItem.value} onChange={e=>setCleanEditingItem({...cleanEditingItem,value:e.target.value})}
+                      onKeyDown={e=>{if(e.key==="Enter"&&cleanEditingItem.value.trim()){setCleanCustomTasks(p=>{const d=[...(p.daily||defaultCleanTasks.daily)];d[idx]={...d[idx],label:cleanEditingItem.value.trim()};return{...p,daily:d};});setCleanEditingItem(null);}}}
+                      style={{flex:1,background:"rgba(255,255,255,.08)",border:"1px solid rgba(102,126,234,.3)",borderRadius:6,padding:"5px 8px",color:"#e8e0f0",fontSize:14,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}} autoFocus/>
+                    <button onClick={()=>{if(cleanEditingItem.value.trim()){setCleanCustomTasks(p=>{const d=[...(p.daily||defaultCleanTasks.daily)];d[idx]={...d[idx],label:cleanEditingItem.value.trim()};return{...p,daily:d};});setCleanEditingItem(null);}}}
+                      style={{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",borderRadius:6,padding:"3px 8px",fontSize:13,color:"#43e97b",cursor:"pointer",fontWeight:700}}>✓</button>
+                    <button onClick={()=>setCleanEditingItem(null)}
+                      style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,padding:"3px 8px",fontSize:13,color:"#aaa",cursor:"pointer"}}>✕</button>
+                  </>
+                  :<>
+                    <span style={{flex:1,fontSize:14,color:"#e8e0f0"}}>{t.label}</span>
+                    <button onClick={()=>setCleanEditingItem({section:"daily",index:idx,value:t.label})}
+                      style={{background:"none",border:"none",fontSize:14,color:"#667eea",cursor:"pointer",padding:"2px 6px"}}>✎</button>
+                    <button onClick={()=>{if(confirm("Delete this task?")){setCleanCustomTasks(p=>{const d=[...(p.daily||defaultCleanTasks.daily)];d.splice(idx,1);return{...p,daily:d};});}}}
+                      style={{background:"none",border:"none",fontSize:14,color:"#f5576c",cursor:"pointer",padding:"2px 6px"}}>✕</button>
+                  </>
+                }
+              </div>
+            ))}
+            <div style={{display:"flex",gap:6,marginTop:6}}>
+              <input value={cleanNewItemText} onChange={e=>setCleanNewItemText(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter"&&cleanNewItemText.trim()){const id="cd_"+Date.now();setCleanCustomTasks(p=>({...p,daily:[...(p.daily||defaultCleanTasks.daily),{id,label:cleanNewItemText.trim()}]}));setCleanNewItemText("");}}}
+                placeholder="+ Add daily task…"
+                style={{flex:1,background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,padding:"6px 8px",color:"#e8e0f0",fontSize:14,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}}/>
+              <button onClick={()=>{if(cleanNewItemText.trim()){const id="cd_"+Date.now();setCleanCustomTasks(p=>({...p,daily:[...(p.daily||defaultCleanTasks.daily),{id,label:cleanNewItemText.trim()}]}));setCleanNewItemText("");}}}
+                style={{background:"linear-gradient(135deg,#667eea,#764ba2)",border:"none",borderRadius:6,padding:"6px 10px",fontSize:14,color:"#fff",cursor:"pointer",fontWeight:800}}>+</button>
+            </div>
+          </div>}
+
           {weeksInMonth.map(week=>{
             const wData=moData.daily[week.key]||{};
-            const totalChecks=DAILY_TASKS.reduce((s,t)=>s+dailyDoneCount(wData,t.id),0);
-            const totalPossible=DAILY_TASKS.length*7;
+            const totalChecks=activeDailyTasks.reduce((s,t)=>s+dailyDoneCount(wData,t.id),0);
+            const totalPossible=activeDailyTasks.length*7;
             const isOpen=openWeek===week.key;
             return(
               <div key={week.key} style={{marginBottom:6,borderRadius:12,border:"1px solid rgba(255,255,255,.07)",overflow:"hidden"}}>
@@ -9391,7 +9451,7 @@ function DayPlanner({plannerData,plannerViewDate,setPlannerViewDate,MOODS,getPla
                     ))}
                   </div>
                   {/* Task rows */}
-                  {DAILY_TASKS.map(t=>{
+                  {activeDailyTasks.map(t=>{
                     const doneCount=dailyDoneCount(wData,t.id);
                     return(
                       <div key={t.id} style={{display:"flex",alignItems:"center",padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,.03)",minWidth:0}}>
@@ -9416,11 +9476,87 @@ function DayPlanner({plannerData,plannerViewDate,setPlannerViewDate,MOODS,getPla
 
         {/* ── WEEKLY (by room/day) ── */}
         <div style={{marginBottom:14}}>
-          <div style={{fontSize:14,fontWeight:900,opacity:.4,letterSpacing:1,marginBottom:8}}>WEEKLY — BY ROOM</div>
+          <div style={{display:"flex",alignItems:"center",marginBottom:8}}>
+            <div style={{fontSize:14,fontWeight:900,opacity:.4,letterSpacing:1,flex:1}}>WEEKLY — BY ROOM</div>
+            <button onClick={()=>setCleanEditMode(cleanEditMode==="weekly"?null:"weekly")}
+              style={{background:cleanEditMode==="weekly"?"rgba(102,126,234,.2)":"rgba(255,255,255,.06)",border:`1px solid ${cleanEditMode==="weekly"?"rgba(102,126,234,.4)":"rgba(255,255,255,.1)"}`,borderRadius:6,padding:"3px 8px",fontSize:12,color:cleanEditMode==="weekly"?"#667eea":"#aaa",cursor:"pointer",fontWeight:700}}>
+              {cleanEditMode==="weekly"?"Done":"✎ Edit"}
+            </button>
+          </div>
+
+          {cleanEditMode==="weekly"&&<div style={{background:"rgba(96,165,250,.06)",border:"1px solid rgba(96,165,250,.15)",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
+            {activeWeeklyRooms.map((room,gIdx)=>(
+              <div key={gIdx} style={{marginBottom:10}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                  {cleanEditingItem?.section==="weeklyRoom"&&cleanEditingItem?.groupIdx===gIdx
+                    ?<>
+                      <input value={cleanEditingItem.value} onChange={e=>setCleanEditingItem({...cleanEditingItem,value:e.target.value})}
+                        onKeyDown={e=>{if(e.key==="Enter"&&cleanEditingItem.value.trim()){setCleanCustomTasks(p=>{const w=[...(p.weekly||defaultCleanTasks.weekly)];w[gIdx]={...w[gIdx],room:cleanEditingItem.value.trim()};return{...p,weekly:w};});setCleanEditingItem(null);}}}
+                        style={{flex:1,background:"rgba(255,255,255,.08)",border:"1px solid rgba(96,165,250,.3)",borderRadius:6,padding:"4px 8px",color:"#e8e0f0",fontSize:13,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}} autoFocus/>
+                      <button onClick={()=>{if(cleanEditingItem.value.trim()){setCleanCustomTasks(p=>{const w=[...(p.weekly||defaultCleanTasks.weekly)];w[gIdx]={...w[gIdx],room:cleanEditingItem.value.trim()};return{...p,weekly:w};});setCleanEditingItem(null);}}}
+                        style={{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",borderRadius:6,padding:"2px 6px",fontSize:12,color:"#43e97b",cursor:"pointer"}}>✓</button>
+                      <button onClick={()=>setCleanEditingItem(null)} style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,padding:"2px 6px",fontSize:12,color:"#aaa",cursor:"pointer"}}>✕</button>
+                    </>
+                    :<>
+                      <span style={{fontSize:12,fontWeight:900,color:"#667eea",opacity:.8}}>{room.day.toUpperCase()}</span>
+                      <span style={{fontSize:14,fontWeight:800,color:"#e8e0f0",flex:1}}>{room.room}</span>
+                      <button onClick={()=>setCleanEditingItem({section:"weeklyRoom",groupIdx:gIdx,value:room.room})}
+                        style={{background:"none",border:"none",fontSize:12,color:"#667eea",cursor:"pointer"}}>✎ name</button>
+                      <button onClick={()=>{if(confirm(`Delete "${room.room}" and all its tasks?`)){setCleanCustomTasks(p=>{const w=[...(p.weekly||defaultCleanTasks.weekly)];w.splice(gIdx,1);return{...p,weekly:w};});}}}
+                        style={{background:"none",border:"none",fontSize:12,color:"#f5576c",cursor:"pointer"}}>✕</button>
+                    </>
+                  }
+                </div>
+                {room.tasks.map((task,tIdx)=>(
+                  <div key={tIdx} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0 3px 16px",borderBottom:"1px solid rgba(255,255,255,.03)"}}>
+                    {cleanEditingItem?.section==="weeklyTask"&&cleanEditingItem?.groupIdx===gIdx&&cleanEditingItem?.taskIdx===tIdx
+                      ?<>
+                        <input value={cleanEditingItem.value} onChange={e=>setCleanEditingItem({...cleanEditingItem,value:e.target.value})}
+                          onKeyDown={e=>{if(e.key==="Enter"&&cleanEditingItem.value.trim()){setCleanCustomTasks(p=>{const w=[...(p.weekly||defaultCleanTasks.weekly)];const tasks=[...w[gIdx].tasks];tasks[tIdx]=cleanEditingItem.value.trim();w[gIdx]={...w[gIdx],tasks};return{...p,weekly:w};});setCleanEditingItem(null);}}}
+                          style={{flex:1,background:"rgba(255,255,255,.08)",border:"1px solid rgba(96,165,250,.3)",borderRadius:6,padding:"4px 8px",color:"#e8e0f0",fontSize:13,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}} autoFocus/>
+                        <button onClick={()=>{if(cleanEditingItem.value.trim()){setCleanCustomTasks(p=>{const w=[...(p.weekly||defaultCleanTasks.weekly)];const tasks=[...w[gIdx].tasks];tasks[tIdx]=cleanEditingItem.value.trim();w[gIdx]={...w[gIdx],tasks};return{...p,weekly:w};});setCleanEditingItem(null);}}}
+                          style={{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",borderRadius:6,padding:"2px 6px",fontSize:12,color:"#43e97b",cursor:"pointer"}}>✓</button>
+                        <button onClick={()=>setCleanEditingItem(null)} style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,padding:"2px 6px",fontSize:12,color:"#aaa",cursor:"pointer"}}>✕</button>
+                      </>
+                      :<>
+                        <span style={{flex:1,fontSize:13,color:"#ccc"}}>{task}</span>
+                        <button onClick={()=>setCleanEditingItem({section:"weeklyTask",groupIdx:gIdx,taskIdx:tIdx,value:task})}
+                          style={{background:"none",border:"none",fontSize:12,color:"#667eea",cursor:"pointer",padding:"1px 4px"}}>✎</button>
+                        <button onClick={()=>{setCleanCustomTasks(p=>{const w=[...(p.weekly||defaultCleanTasks.weekly)];const tasks=[...w[gIdx].tasks];tasks.splice(tIdx,1);w[gIdx]={...w[gIdx],tasks};return{...p,weekly:w};});}}
+                          style={{background:"none",border:"none",fontSize:12,color:"#f5576c",cursor:"pointer",padding:"1px 4px"}}>✕</button>
+                      </>
+                    }
+                  </div>
+                ))}
+                <div style={{display:"flex",gap:4,marginTop:4,paddingLeft:16}}>
+                  <input value={cleanEditingItem?.section==="addWeeklyTask"&&cleanEditingItem?.groupIdx===gIdx?cleanEditingItem.value:""}
+                    onChange={e=>setCleanEditingItem({section:"addWeeklyTask",groupIdx:gIdx,value:e.target.value})}
+                    onKeyDown={e=>{if(e.key==="Enter"&&cleanEditingItem?.value?.trim()){setCleanCustomTasks(p=>{const w=[...(p.weekly||defaultCleanTasks.weekly)];w[gIdx]={...w[gIdx],tasks:[...w[gIdx].tasks,cleanEditingItem.value.trim()]};return{...p,weekly:w};});setCleanEditingItem(null);}}}
+                    placeholder="+ Add task…"
+                    style={{flex:1,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",borderRadius:5,padding:"4px 7px",color:"#e8e0f0",fontSize:13,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}}/>
+                  <button onClick={()=>{if(cleanEditingItem?.section==="addWeeklyTask"&&cleanEditingItem?.groupIdx===gIdx&&cleanEditingItem?.value?.trim()){setCleanCustomTasks(p=>{const w=[...(p.weekly||defaultCleanTasks.weekly)];w[gIdx]={...w[gIdx],tasks:[...w[gIdx].tasks,cleanEditingItem.value.trim()]};return{...p,weekly:w};});setCleanEditingItem(null);}}}
+                    style={{background:"linear-gradient(135deg,#667eea,#764ba2)",border:"none",borderRadius:5,padding:"4px 8px",fontSize:13,color:"#fff",cursor:"pointer",fontWeight:800}}>+</button>
+                </div>
+              </div>
+            ))}
+            {/* Add new room/day group */}
+            <div style={{borderTop:"1px solid rgba(255,255,255,.08)",paddingTop:8,marginTop:4}}>
+              <div style={{display:"flex",gap:4}}>
+                <input value={cleanEditingItem?.section==="addWeeklyRoom"?cleanEditingItem.value:""}
+                  onChange={e=>setCleanEditingItem({section:"addWeeklyRoom",value:e.target.value})}
+                  onKeyDown={e=>{if(e.key==="Enter"&&cleanEditingItem?.value?.trim()){const days=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];const usedDays=(activeWeeklyRooms||[]).map(r=>r.day);const nextDay=days.find(d=>!usedDays.includes(d))||"Mon";setCleanCustomTasks(p=>({...p,weekly:[...(p.weekly||defaultCleanTasks.weekly),{day:nextDay,room:cleanEditingItem.value.trim(),tasks:[]}]}));setCleanEditingItem(null);}}}
+                  placeholder="+ Add new room/area…"
+                  style={{flex:1,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",borderRadius:5,padding:"5px 8px",color:"#e8e0f0",fontSize:13,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}}/>
+                <button onClick={()=>{if(cleanEditingItem?.section==="addWeeklyRoom"&&cleanEditingItem?.value?.trim()){const days=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];const usedDays=(activeWeeklyRooms||[]).map(r=>r.day);const nextDay=days.find(d=>!usedDays.includes(d))||"Mon";setCleanCustomTasks(p=>({...p,weekly:[...(p.weekly||defaultCleanTasks.weekly),{day:nextDay,room:cleanEditingItem.value.trim(),tasks:[]}]}));setCleanEditingItem(null);}}}
+                  style={{background:"linear-gradient(135deg,#667eea,#764ba2)",border:"none",borderRadius:5,padding:"5px 10px",fontSize:13,color:"#fff",cursor:"pointer",fontWeight:800}}>+</button>
+              </div>
+            </div>
+          </div>}
+
           {weeksInMonth.map(week=>{
             const isOpen=openWeek===`w_${week.key}`;
-            const totalDone=WEEKLY_ROOMS.reduce((acc,r)=>{const key=`${week.key}_${r.day}`;const d=moData.weekly[key]||{};return acc+r.tasks.filter((_,i)=>d[i]).length;},0);
-            const totalTasks=WEEKLY_ROOMS.reduce((a,r)=>a+r.tasks.length,0);
+            const totalDone=activeWeeklyRooms.reduce((acc,r)=>{const key=`${week.key}_${r.day}`;const d=moData.weekly[key]||{};return acc+r.tasks.filter((_,i)=>d[i]).length;},0);
+            const totalTasks=activeWeeklyRooms.reduce((a,r)=>a+r.tasks.length,0);
             return(
               <div key={week.key} style={{marginBottom:6,borderRadius:12,border:"1px solid rgba(255,255,255,.07)",overflow:"hidden"}}>
                 <div className="week-header" onClick={()=>setOpenWeek(isOpen?null:`w_${week.key}`)}
@@ -9430,7 +9566,7 @@ function DayPlanner({plannerData,plannerViewDate,setPlannerViewDate,MOODS,getPla
                   <span style={{fontSize:14,opacity:.4}}>{isOpen?"▲":"▼"}</span>
                 </div>
                 {isOpen&&<div style={{padding:"6px 12px 10px",background:"rgba(0,0,0,.15)"}}>
-                  {WEEKLY_ROOMS.map(room=>{
+                  {activeWeeklyRooms.map(room=>{
                     const key=`${week.key}_${room.day}`;
                     const d=moData.weekly[key]||{};
                     const roomDone=room.tasks.filter((_,i)=>d[i]).length;
@@ -9461,11 +9597,50 @@ function DayPlanner({plannerData,plannerViewDate,setPlannerViewDate,MOODS,getPla
         <div style={{marginBottom:14}}>
           <div style={{display:"flex",alignItems:"center",marginBottom:8}}>
             <div style={{fontSize:14,fontWeight:900,opacity:.4,letterSpacing:1,flex:1}}>MONTHLY</div>
+            <button onClick={()=>setCleanEditMode(cleanEditMode==="monthly"?null:"monthly")}
+              style={{background:cleanEditMode==="monthly"?"rgba(240,147,251,.2)":"rgba(255,255,255,.06)",border:`1px solid ${cleanEditMode==="monthly"?"rgba(240,147,251,.4)":"rgba(255,255,255,.1)"}`,borderRadius:6,padding:"3px 8px",fontSize:12,color:cleanEditMode==="monthly"?"#f093fb":"#aaa",cursor:"pointer",fontWeight:700,marginRight:8}}>
+              {cleanEditMode==="monthly"?"Done":"✎ Edit"}
+            </button>
             <span style={{fontSize:14,color:monthlyDone===monthlyTotal?"#43e97b":"rgba(255,255,255,.35)",fontWeight:700}}>{monthlyDone}/{monthlyTotal}</span>
           </div>
+
+          {cleanEditMode==="monthly"&&<div style={{background:"rgba(240,147,251,.06)",border:"1px solid rgba(240,147,251,.15)",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
+            {activeMonthlyTasks.map((t,idx)=>(
+              <div key={idx} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,.04)"}}>
+                {cleanEditingItem?.section==="monthly"&&cleanEditingItem?.index===idx
+                  ?<>
+                    <input value={cleanEditingItem.value} onChange={e=>setCleanEditingItem({...cleanEditingItem,value:e.target.value})}
+                      onKeyDown={e=>{if(e.key==="Enter"&&cleanEditingItem.value.trim()){setCleanCustomTasks(p=>{const m=[...(p.monthly||defaultCleanTasks.monthly)];m[idx]={...m[idx],label:cleanEditingItem.value.trim()};return{...p,monthly:m};});setCleanEditingItem(null);}}}
+                      style={{flex:1,background:"rgba(255,255,255,.08)",border:"1px solid rgba(240,147,251,.3)",borderRadius:6,padding:"5px 8px",color:"#e8e0f0",fontSize:14,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}} autoFocus/>
+                    <button onClick={()=>{if(cleanEditingItem.value.trim()){setCleanCustomTasks(p=>{const m=[...(p.monthly||defaultCleanTasks.monthly)];m[idx]={...m[idx],label:cleanEditingItem.value.trim()};return{...p,monthly:m};});setCleanEditingItem(null);}}}
+                      style={{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",borderRadius:6,padding:"3px 8px",fontSize:13,color:"#43e97b",cursor:"pointer",fontWeight:700}}>✓</button>
+                    <button onClick={()=>setCleanEditingItem(null)}
+                      style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,padding:"3px 8px",fontSize:13,color:"#aaa",cursor:"pointer"}}>✕</button>
+                  </>
+                  :<>
+                    <span style={{flex:1,fontSize:14,color:"#e8e0f0"}}>{t.label}</span>
+                    <button onClick={()=>setCleanEditingItem({section:"monthly",index:idx,value:t.label})}
+                      style={{background:"none",border:"none",fontSize:14,color:"#f093fb",cursor:"pointer",padding:"2px 6px"}}>✎</button>
+                    <button onClick={()=>{if(confirm("Delete this task?")){setCleanCustomTasks(p=>{const m=[...(p.monthly||defaultCleanTasks.monthly)];m.splice(idx,1);return{...p,monthly:m};});}}}
+                      style={{background:"none",border:"none",fontSize:14,color:"#f5576c",cursor:"pointer",padding:"2px 6px"}}>✕</button>
+                  </>
+                }
+              </div>
+            ))}
+            <div style={{display:"flex",gap:6,marginTop:6}}>
+              <input value={cleanEditingItem?.section==="addMonthly"?cleanEditingItem.value:""}
+                onChange={e=>setCleanEditingItem({section:"addMonthly",value:e.target.value})}
+                onKeyDown={e=>{if(e.key==="Enter"&&cleanEditingItem?.value?.trim()){const id="cm_"+Date.now();setCleanCustomTasks(p=>({...p,monthly:[...(p.monthly||defaultCleanTasks.monthly),{id,label:cleanEditingItem.value.trim()}]}));setCleanEditingItem(null);}}}
+                placeholder="+ Add monthly task…"
+                style={{flex:1,background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,padding:"6px 8px",color:"#e8e0f0",fontSize:14,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}}/>
+              <button onClick={()=>{if(cleanEditingItem?.section==="addMonthly"&&cleanEditingItem?.value?.trim()){const id="cm_"+Date.now();setCleanCustomTasks(p=>({...p,monthly:[...(p.monthly||defaultCleanTasks.monthly),{id,label:cleanEditingItem.value.trim()}]}));setCleanEditingItem(null);}}}
+                style={{background:"linear-gradient(135deg,#f093fb,#764ba2)",border:"none",borderRadius:6,padding:"6px 10px",fontSize:14,color:"#fff",cursor:"pointer",fontWeight:800}}>+</button>
+            </div>
+          </div>}
+
           <div style={{background:"rgba(255,255,255,.02)",border:"1px solid rgba(255,255,255,.07)",borderRadius:12,overflow:"hidden"}}>
             <div style={{padding:"4px 12px 8px"}}>
-              {MONTHLY_TASKS.map(t=>{
+              {activeMonthlyTasks.map(t=>{
                 const done=!!moData.monthly[t.id];
                 return(
                   <div key={t.id} className="clean-item" onClick={()=>toggleMonthly(t.id)}
@@ -9884,6 +10059,24 @@ function WorkoutTab({workoutData,setWorkoutData,checkBox,MONTH_NAMES}){
   const getWoMonth=()=>({daily:{},weekly:{},monthly:{},customMonthly:[],...(workoutData[woMonthKey]||{})});
   const woData=getWoMonth();
 
+  // ── Customizable task lists for Workout ──
+  const WO_CUSTOM_KEY="zodibuddy_wo_custom_v1";
+  const defaultWoTasks={
+    daily:WO_DAILY.map(t=>({...t})),
+    weekly:WO_WEEKLY.map(r=>({...r,exercises:[...r.exercises.map(e=>({...e}))]})),
+    monthly:WO_MONTHLY.map(t=>({...t}))
+  };
+  const[woCustomTasks,setWoCustomTasks]=useState(()=>{
+    try{const s=ZobuddyDB.get(WO_CUSTOM_KEY);return s?JSON.parse(s):defaultWoTasks;}catch{return defaultWoTasks;}
+  });
+  useEffect(()=>{try{ZobuddyDB.set(WO_CUSTOM_KEY,JSON.stringify(woCustomTasks));}catch{}},[woCustomTasks]);
+  const[woEditMode,setWoEditMode]=useState(null);
+  const[woEditingItem,setWoEditingItem]=useState(null);
+
+  const activeWoDaily=woCustomTasks.daily||defaultWoTasks.daily;
+  const activeWoWeekly=woCustomTasks.weekly||defaultWoTasks.weekly;
+  const activeWoMonthly=woCustomTasks.monthly||defaultWoTasks.monthly;
+
   const toggleWoDaily=(weekKey,taskId,day)=>{
     setWorkoutData(p=>{const mo={...getWoMonth(),...p[woMonthKey]};const wk={...(mo.daily[weekKey]||{})};
       if(day){const taskDays=typeof wk[taskId]==="object"&&wk[taskId]!==null&&wk[taskId]!==true?{...wk[taskId]}:{};taskDays[day]=!taskDays[day];wk[taskId]=taskDays;}
@@ -9892,8 +10085,8 @@ function WorkoutTab({workoutData,setWorkoutData,checkBox,MONTH_NAMES}){
   };
   const isWoDailyDone=(wData,taskId,day)=>{const v=wData[taskId];if(!v)return false;if(typeof v==="object"&&v!==null)return !!v[day];return !!v;};
   const woDailyDoneCount=(wData,taskId)=>{const v=wData[taskId];if(!v)return 0;if(typeof v==="object"&&v!==null)return Object.values(v).filter(Boolean).length;return v?7:0;};
-  const WO_DAYS_SHORT=["M","T","W","T","F","S","S"];
-  const WO_DAYS_FULL=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const WO_DAYS_SHORT=["S","M","T","W","T","F","S"];
+  const WO_DAYS_FULL=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const toggleWoWeekly=(weekKey,day,idx)=>{
     setWorkoutData(p=>{const mo={...getWoMonth(),...p[woMonthKey]};const key=`${weekKey}_${day}`;const wk={...(mo.weekly[key]||{})};wk[idx]=!wk[idx];return{...p,[woMonthKey]:{...mo,weekly:{...mo.weekly,[key]:wk}}};});
   };
@@ -9921,16 +10114,16 @@ function WorkoutTab({workoutData,setWorkoutData,checkBox,MONTH_NAMES}){
 
   const woWeeks=useMemo(()=>{
     const weeks=[];const first=new Date(woMonth.y,woMonth.m,1);const last=new Date(woMonth.y,woMonth.m+1,0);
-    const cur=new Date(first);const dow=cur.getDay();cur.setDate(cur.getDate()-(dow===0?6:dow-1));
+    const cur=new Date(first);const dow=cur.getDay();cur.setDate(cur.getDate()-dow);
     while(cur<=last){const wStart=new Date(cur);const label=`Week of ${wStart.toLocaleDateString("en-US",{month:"short",day:"numeric"})}`;const key=toDateStr(wStart);weeks.push({label,key});cur.setDate(cur.getDate()+7);}
     return weeks;
   },[woMonth]);
 
-  const[woOpenWeek,setWoOpenWeek]=useState(()=>toDateStr(new Date(new Date().getFullYear(),new Date().getMonth(),1)));
+  const[woOpenWeek,setWoOpenWeek]=useState(()=>{const now=new Date();const d=new Date(now);d.setDate(d.getDate()-d.getDay());return toDateStr(d);});
   const[woNewCustom,setWoNewCustom]=useState("");
   const[woCarryConfirm,setWoCarryConfirm]=useState(false);
-  const woMonthlyDone=WO_MONTHLY.filter(t=>woData.monthly[t.id]).length+((woData.customMonthly||[]).filter(t=>t.done).length);
-  const woMonthlyTotal=WO_MONTHLY.length+(woData.customMonthly||[]).length;
+  const woMonthlyDone=activeWoMonthly.filter(t=>woData.monthly[t.id]).length+((woData.customMonthly||[]).filter(t=>t.done).length);
+  const woMonthlyTotal=activeWoMonthly.length+(woData.customMonthly||[]).length;
 
   return <div style={{flex:1,overflowY:"auto",padding:"12px 16px 16px"}}>
     {/* Month nav */}
@@ -9949,11 +10142,52 @@ function WorkoutTab({workoutData,setWorkoutData,checkBox,MONTH_NAMES}){
 
     {/* ── DAILY FOUNDATION with day-of-week columns ── */}
     <div style={{marginBottom:14}}>
-      <div style={{fontSize:14,fontWeight:900,opacity:.4,letterSpacing:1,marginBottom:8}}>DAILY FOUNDATION</div>
+      <div style={{display:"flex",alignItems:"center",marginBottom:8}}>
+        <div style={{fontSize:14,fontWeight:900,opacity:.4,letterSpacing:1,flex:1}}>DAILY FOUNDATION</div>
+        <button onClick={()=>setWoEditMode(woEditMode==="daily"?null:"daily")}
+          style={{background:woEditMode==="daily"?"rgba(67,233,123,.2)":"rgba(255,255,255,.06)",border:`1px solid ${woEditMode==="daily"?"rgba(67,233,123,.4)":"rgba(255,255,255,.1)"}`,borderRadius:6,padding:"3px 8px",fontSize:12,color:woEditMode==="daily"?"#43e97b":"#aaa",cursor:"pointer",fontWeight:700}}>
+          {woEditMode==="daily"?"Done":"✎ Edit"}
+        </button>
+      </div>
+
+      {woEditMode==="daily"&&<div style={{background:"rgba(67,233,123,.06)",border:"1px solid rgba(67,233,123,.15)",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
+        {activeWoDaily.map((t,idx)=>(
+          <div key={idx} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,.04)"}}>
+            {woEditingItem?.section==="daily"&&woEditingItem?.index===idx
+              ?<>
+                <input value={woEditingItem.value} onChange={e=>setWoEditingItem({...woEditingItem,value:e.target.value})}
+                  onKeyDown={e=>{if(e.key==="Enter"&&woEditingItem.value.trim()){setWoCustomTasks(p=>{const d=[...(p.daily||defaultWoTasks.daily)];d[idx]={...d[idx],label:woEditingItem.value.trim()};return{...p,daily:d};});setWoEditingItem(null);}}}
+                  style={{flex:1,background:"rgba(255,255,255,.08)",border:"1px solid rgba(67,233,123,.3)",borderRadius:6,padding:"5px 8px",color:"#e8e0f0",fontSize:14,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}} autoFocus/>
+                <button onClick={()=>{if(woEditingItem.value.trim()){setWoCustomTasks(p=>{const d=[...(p.daily||defaultWoTasks.daily)];d[idx]={...d[idx],label:woEditingItem.value.trim()};return{...p,daily:d};});setWoEditingItem(null);}}}
+                  style={{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",borderRadius:6,padding:"3px 8px",fontSize:13,color:"#43e97b",cursor:"pointer",fontWeight:700}}>✓</button>
+                <button onClick={()=>setWoEditingItem(null)}
+                  style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,padding:"3px 8px",fontSize:13,color:"#aaa",cursor:"pointer"}}>✕</button>
+              </>
+              :<>
+                <span style={{flex:1,fontSize:14,color:"#e8e0f0"}}>{t.label}{t.sets?` (${t.sets})`:""}</span>
+                <button onClick={()=>setWoEditingItem({section:"daily",index:idx,value:t.label})}
+                  style={{background:"none",border:"none",fontSize:14,color:"#43e97b",cursor:"pointer",padding:"2px 6px"}}>✎</button>
+                <button onClick={()=>{if(confirm("Delete this exercise?")){setWoCustomTasks(p=>{const d=[...(p.daily||defaultWoTasks.daily)];d.splice(idx,1);return{...p,daily:d};});}}}
+                  style={{background:"none",border:"none",fontSize:14,color:"#f5576c",cursor:"pointer",padding:"2px 6px"}}>✕</button>
+              </>
+            }
+          </div>
+        ))}
+        <div style={{display:"flex",gap:6,marginTop:6}}>
+          <input value={woEditingItem?.section==="addDaily"?woEditingItem.value:""}
+            onChange={e=>setWoEditingItem({section:"addDaily",value:e.target.value})}
+            onKeyDown={e=>{if(e.key==="Enter"&&woEditingItem?.value?.trim()){const id="wd_"+Date.now();setWoCustomTasks(p=>({...p,daily:[...(p.daily||defaultWoTasks.daily),{id,label:woEditingItem.value.trim(),sets:"",note:""}]}));setWoEditingItem(null);}}}
+            placeholder="+ Add daily exercise…"
+            style={{flex:1,background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,padding:"6px 8px",color:"#e8e0f0",fontSize:14,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}}/>
+          <button onClick={()=>{if(woEditingItem?.section==="addDaily"&&woEditingItem?.value?.trim()){const id="wd_"+Date.now();setWoCustomTasks(p=>({...p,daily:[...(p.daily||defaultWoTasks.daily),{id,label:woEditingItem.value.trim(),sets:"",note:""}]}));setWoEditingItem(null);}}}
+            style={{background:"linear-gradient(135deg,#43e97b,#38bdf8)",border:"none",borderRadius:6,padding:"6px 10px",fontSize:14,color:"#fff",cursor:"pointer",fontWeight:800}}>+</button>
+        </div>
+      </div>}
+
       {woWeeks.map(week=>{
         const wData=woData.daily[week.key]||{};
-        const totalChecks=WO_DAILY.reduce((s,t)=>s+woDailyDoneCount(wData,t.id),0);
-        const totalPossible=WO_DAILY.length*7;
+        const totalChecks=activeWoDaily.reduce((s,t)=>s+woDailyDoneCount(wData,t.id),0);
+        const totalPossible=activeWoDaily.length*7;
         const isOpen=woOpenWeek===week.key;
         return(
           <div key={week.key} style={{marginBottom:6,borderRadius:12,border:"1px solid rgba(255,255,255,.07)",overflow:"hidden"}}>
@@ -9964,21 +10198,19 @@ function WorkoutTab({workoutData,setWorkoutData,checkBox,MONTH_NAMES}){
               <span style={{fontSize:14,opacity:.4}}>{isOpen?"▲":"▼"}</span>
             </div>
             {isOpen&&<div style={{padding:"6px 6px 10px",background:"rgba(0,0,0,.15)",overflowX:"auto"}}>
-              {/* Day headers */}
               <div style={{display:"flex",alignItems:"center",marginBottom:4,minWidth:0}}>
                 <div style={{flex:1,minWidth:80}}/>
                 {WO_DAYS_SHORT.map((d,i)=>(
                   <div key={i} style={{width:28,textAlign:"center",fontSize:10,fontWeight:800,opacity:.35,flexShrink:0}}>{d}</div>
                 ))}
               </div>
-              {/* Task rows */}
-              {WO_DAILY.map(t=>{
+              {activeWoDaily.map(t=>{
                 const doneCount=woDailyDoneCount(wData,t.id);
                 return(
                   <div key={t.id} style={{display:"flex",alignItems:"center",padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,.03)",minWidth:0}}>
                     <div style={{flex:1,minWidth:80,paddingRight:6}}>
                       <div style={{fontSize:13,color:doneCount>=7?"rgba(255,255,255,.35)":"#e8e0f0",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.label}</div>
-                      <div style={{fontSize:11,opacity:.3}}>{t.sets} · {t.note}</div>
+                      {(t.sets||t.note)&&<div style={{fontSize:11,opacity:.3}}>{[t.sets,t.note].filter(Boolean).join(" · ")}</div>}
                     </div>
                     {WO_DAYS_FULL.map((day)=>{
                       const done=isWoDailyDone(wData,t.id,day);
@@ -10000,11 +10232,86 @@ function WorkoutTab({workoutData,setWorkoutData,checkBox,MONTH_NAMES}){
 
     {/* ── WEEKLY TRAINING SPLIT ── */}
     <div style={{marginBottom:14}}>
-      <div style={{fontSize:14,fontWeight:900,opacity:.4,letterSpacing:1,marginBottom:8}}>WEEKLY TRAINING SPLIT</div>
+      <div style={{display:"flex",alignItems:"center",marginBottom:8}}>
+        <div style={{fontSize:14,fontWeight:900,opacity:.4,letterSpacing:1,flex:1}}>WEEKLY TRAINING SPLIT</div>
+        <button onClick={()=>setWoEditMode(woEditMode==="weekly"?null:"weekly")}
+          style={{background:woEditMode==="weekly"?"rgba(167,139,250,.2)":"rgba(255,255,255,.06)",border:`1px solid ${woEditMode==="weekly"?"rgba(167,139,250,.4)":"rgba(255,255,255,.1)"}`,borderRadius:6,padding:"3px 8px",fontSize:12,color:woEditMode==="weekly"?"#a78bfa":"#aaa",cursor:"pointer",fontWeight:700}}>
+          {woEditMode==="weekly"?"Done":"✎ Edit"}
+        </button>
+      </div>
+
+      {woEditMode==="weekly"&&<div style={{background:"rgba(167,139,250,.06)",border:"1px solid rgba(167,139,250,.15)",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
+        {activeWoWeekly.map((dayGroup,gIdx)=>(
+          <div key={gIdx} style={{marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+              {woEditingItem?.section==="weeklyFocus"&&woEditingItem?.groupIdx===gIdx
+                ?<>
+                  <input value={woEditingItem.value} onChange={e=>setWoEditingItem({...woEditingItem,value:e.target.value})}
+                    onKeyDown={e=>{if(e.key==="Enter"&&woEditingItem.value.trim()){setWoCustomTasks(p=>{const w=[...(p.weekly||defaultWoTasks.weekly)];w[gIdx]={...w[gIdx],focus:woEditingItem.value.trim()};return{...p,weekly:w};});setWoEditingItem(null);}}}
+                    style={{flex:1,background:"rgba(255,255,255,.08)",border:"1px solid rgba(167,139,250,.3)",borderRadius:6,padding:"4px 8px",color:"#e8e0f0",fontSize:13,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}} autoFocus/>
+                  <button onClick={()=>{if(woEditingItem.value.trim()){setWoCustomTasks(p=>{const w=[...(p.weekly||defaultWoTasks.weekly)];w[gIdx]={...w[gIdx],focus:woEditingItem.value.trim()};return{...p,weekly:w};});setWoEditingItem(null);}}}
+                    style={{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",borderRadius:6,padding:"2px 6px",fontSize:12,color:"#43e97b",cursor:"pointer"}}>✓</button>
+                  <button onClick={()=>setWoEditingItem(null)} style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,padding:"2px 6px",fontSize:12,color:"#aaa",cursor:"pointer"}}>✕</button>
+                </>
+                :<>
+                  <span style={{fontSize:12,fontWeight:900,color:dayGroup.color||"#a78bfa",opacity:.8}}>{dayGroup.day.toUpperCase()}</span>
+                  <span style={{fontSize:14,fontWeight:800,color:"#e8e0f0",flex:1}}>{dayGroup.focus}</span>
+                  <button onClick={()=>setWoEditingItem({section:"weeklyFocus",groupIdx:gIdx,value:dayGroup.focus})}
+                    style={{background:"none",border:"none",fontSize:12,color:"#a78bfa",cursor:"pointer"}}>✎ name</button>
+                  <button onClick={()=>{if(confirm(`Delete "${dayGroup.focus}" and all exercises?`)){setWoCustomTasks(p=>{const w=[...(p.weekly||defaultWoTasks.weekly)];w.splice(gIdx,1);return{...p,weekly:w};});}}}
+                    style={{background:"none",border:"none",fontSize:12,color:"#f5576c",cursor:"pointer"}}>✕</button>
+                </>
+              }
+            </div>
+            {dayGroup.exercises.map((ex,tIdx)=>(
+              <div key={tIdx} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0 3px 16px",borderBottom:"1px solid rgba(255,255,255,.03)"}}>
+                {woEditingItem?.section==="weeklyEx"&&woEditingItem?.groupIdx===gIdx&&woEditingItem?.taskIdx===tIdx
+                  ?<>
+                    <input value={woEditingItem.value} onChange={e=>setWoEditingItem({...woEditingItem,value:e.target.value})}
+                      onKeyDown={e=>{if(e.key==="Enter"&&woEditingItem.value.trim()){setWoCustomTasks(p=>{const w=[...(p.weekly||defaultWoTasks.weekly)];const exs=[...w[gIdx].exercises];exs[tIdx]={...exs[tIdx],name:woEditingItem.value.trim()};w[gIdx]={...w[gIdx],exercises:exs};return{...p,weekly:w};});setWoEditingItem(null);}}}
+                      style={{flex:1,background:"rgba(255,255,255,.08)",border:"1px solid rgba(167,139,250,.3)",borderRadius:6,padding:"4px 8px",color:"#e8e0f0",fontSize:13,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}} autoFocus/>
+                    <button onClick={()=>{if(woEditingItem.value.trim()){setWoCustomTasks(p=>{const w=[...(p.weekly||defaultWoTasks.weekly)];const exs=[...w[gIdx].exercises];exs[tIdx]={...exs[tIdx],name:woEditingItem.value.trim()};w[gIdx]={...w[gIdx],exercises:exs};return{...p,weekly:w};});setWoEditingItem(null);}}}
+                      style={{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",borderRadius:6,padding:"2px 6px",fontSize:12,color:"#43e97b",cursor:"pointer"}}>✓</button>
+                    <button onClick={()=>setWoEditingItem(null)} style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,padding:"2px 6px",fontSize:12,color:"#aaa",cursor:"pointer"}}>✕</button>
+                  </>
+                  :<>
+                    <span style={{flex:1,fontSize:13,color:"#ccc"}}>{ex.name}{ex.sets?` · ${ex.sets}`:""}</span>
+                    <button onClick={()=>setWoEditingItem({section:"weeklyEx",groupIdx:gIdx,taskIdx:tIdx,value:ex.name})}
+                      style={{background:"none",border:"none",fontSize:12,color:"#a78bfa",cursor:"pointer",padding:"1px 4px"}}>✎</button>
+                    <button onClick={()=>{setWoCustomTasks(p=>{const w=[...(p.weekly||defaultWoTasks.weekly)];const exs=[...w[gIdx].exercises];exs.splice(tIdx,1);w[gIdx]={...w[gIdx],exercises:exs};return{...p,weekly:w};});}}
+                      style={{background:"none",border:"none",fontSize:12,color:"#f5576c",cursor:"pointer",padding:"1px 4px"}}>✕</button>
+                  </>
+                }
+              </div>
+            ))}
+            <div style={{display:"flex",gap:4,marginTop:4,paddingLeft:16}}>
+              <input value={woEditingItem?.section==="addWeeklyEx"&&woEditingItem?.groupIdx===gIdx?woEditingItem.value:""}
+                onChange={e=>setWoEditingItem({section:"addWeeklyEx",groupIdx:gIdx,value:e.target.value})}
+                onKeyDown={e=>{if(e.key==="Enter"&&woEditingItem?.value?.trim()){setWoCustomTasks(p=>{const w=[...(p.weekly||defaultWoTasks.weekly)];w[gIdx]={...w[gIdx],exercises:[...w[gIdx].exercises,{name:woEditingItem.value.trim(),sets:"",note:""}]};return{...p,weekly:w};});setWoEditingItem(null);}}}
+                placeholder="+ Add exercise…"
+                style={{flex:1,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",borderRadius:5,padding:"4px 7px",color:"#e8e0f0",fontSize:13,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}}/>
+              <button onClick={()=>{if(woEditingItem?.section==="addWeeklyEx"&&woEditingItem?.groupIdx===gIdx&&woEditingItem?.value?.trim()){setWoCustomTasks(p=>{const w=[...(p.weekly||defaultWoTasks.weekly)];w[gIdx]={...w[gIdx],exercises:[...w[gIdx].exercises,{name:woEditingItem.value.trim(),sets:"",note:""}]};return{...p,weekly:w};});setWoEditingItem(null);}}}
+                style={{background:"linear-gradient(135deg,#a78bfa,#667eea)",border:"none",borderRadius:5,padding:"4px 8px",fontSize:13,color:"#fff",cursor:"pointer",fontWeight:800}}>+</button>
+            </div>
+          </div>
+        ))}
+        <div style={{borderTop:"1px solid rgba(255,255,255,.08)",paddingTop:8,marginTop:4}}>
+          <div style={{display:"flex",gap:4}}>
+            <input value={woEditingItem?.section==="addWeeklyGroup"?woEditingItem.value:""}
+              onChange={e=>setWoEditingItem({section:"addWeeklyGroup",value:e.target.value})}
+              onKeyDown={e=>{if(e.key==="Enter"&&woEditingItem?.value?.trim()){const days=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];const usedDays=(activeWoWeekly||[]).map(r=>r.day);const nextDay=days.find(d=>!usedDays.includes(d))||"Mon";const colors=["#f093fb","#43e97b","#60a5fa","#feca57","#f5576c","#38bdf8","#a78bfa"];setWoCustomTasks(p=>({...p,weekly:[...(p.weekly||defaultWoTasks.weekly),{day:nextDay,focus:woEditingItem.value.trim(),color:colors[activeWoWeekly.length%colors.length],exercises:[]}]}));setWoEditingItem(null);}}}
+              placeholder="+ Add new training day…"
+              style={{flex:1,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",borderRadius:5,padding:"5px 8px",color:"#e8e0f0",fontSize:13,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}}/>
+            <button onClick={()=>{if(woEditingItem?.section==="addWeeklyGroup"&&woEditingItem?.value?.trim()){const days=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];const usedDays=(activeWoWeekly||[]).map(r=>r.day);const nextDay=days.find(d=>!usedDays.includes(d))||"Mon";const colors=["#f093fb","#43e97b","#60a5fa","#feca57","#f5576c","#38bdf8","#a78bfa"];setWoCustomTasks(p=>({...p,weekly:[...(p.weekly||defaultWoTasks.weekly),{day:nextDay,focus:woEditingItem.value.trim(),color:colors[activeWoWeekly.length%colors.length],exercises:[]}]}));setWoEditingItem(null);}}}
+              style={{background:"linear-gradient(135deg,#a78bfa,#667eea)",border:"none",borderRadius:5,padding:"5px 10px",fontSize:13,color:"#fff",cursor:"pointer",fontWeight:800}}>+</button>
+          </div>
+        </div>
+      </div>}
+
       {woWeeks.map(week=>{
         const isOpen=woOpenWeek===`wo_${week.key}`;
-        const totalDone=WO_WEEKLY.reduce((acc,r)=>{const key=`${week.key}_${r.day}`;const d=woData.weekly[key]||{};return acc+r.exercises.filter((_,i)=>d[i]).length;},0);
-        const totalEx=WO_WEEKLY.reduce((a,r)=>a+r.exercises.length,0);
+        const totalDone=activeWoWeekly.reduce((acc,r)=>{const key=`${week.key}_${r.day}`;const d=woData.weekly[key]||{};return acc+r.exercises.filter((_,i)=>d[i]).length;},0);
+        const totalEx=activeWoWeekly.reduce((a,r)=>a+r.exercises.length,0);
         return(
           <div key={week.key} style={{marginBottom:6,borderRadius:12,border:"1px solid rgba(255,255,255,.07)",overflow:"hidden"}}>
             <div className="week-header" onClick={()=>setWoOpenWeek(isOpen?null:`wo_${week.key}`)}
@@ -10014,28 +10321,28 @@ function WorkoutTab({workoutData,setWorkoutData,checkBox,MONTH_NAMES}){
               <span style={{fontSize:14,opacity:.4}}>{isOpen?"▲":"▼"}</span>
             </div>
             {isOpen&&<div style={{padding:"6px 12px 10px",background:"rgba(0,0,0,.15)"}}>
-              {WO_WEEKLY.map(day=>{
+              {activeWoWeekly.map(day=>{
                 const key=`${week.key}_${day.day}`;
                 const d=woData.weekly[key]||{};
                 const dayDone=day.exercises.filter((_,i)=>d[i]).length;
                 return(
                   <div key={day.day} style={{marginBottom:12}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,paddingBottom:4,borderBottom:`1px solid ${day.color}22`}}>
-                      <span style={{fontSize:13,fontWeight:900,color:day.color,letterSpacing:.5}}>{day.day.toUpperCase()}</span>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,paddingBottom:4,borderBottom:`1px solid ${day.color||"#a78bfa"}22`}}>
+                      <span style={{fontSize:13,fontWeight:900,color:day.color||"#a78bfa",letterSpacing:.5}}>{day.day.toUpperCase()}</span>
                       <span style={{fontSize:16,fontWeight:800,color:"#e8e0f0"}}>{day.focus}</span>
-                      <div style={{marginLeft:4,height:6,width:6,borderRadius:"50%",background:day.color,boxShadow:`0 0 5px ${day.color}`}}/>
+                      <div style={{marginLeft:4,height:6,width:6,borderRadius:"50%",background:day.color||"#a78bfa",boxShadow:`0 0 5px ${day.color||"#a78bfa"}`}}/>
                       <span style={{marginLeft:"auto",fontSize:13,color:dayDone===day.exercises.length?"#43e97b":"rgba(255,255,255,.3)",fontWeight:700}}>{dayDone}/{day.exercises.length}</span>
                     </div>
                     {day.exercises.map((ex,i)=>(
                       <div key={i} className="clean-item" onClick={()=>toggleWoWeekly(week.key,day.day,i)}
                         style={{display:"flex",alignItems:"flex-start",gap:10,padding:"7px 4px",borderBottom:"1px solid rgba(255,255,255,.03)",cursor:"pointer"}}>
-                        <div style={{marginTop:2}}>{checkBox(!!d[i],day.color)}</div>
+                        <div style={{marginTop:2}}>{checkBox(!!d[i],day.color||"#a78bfa")}</div>
                         <div style={{flex:1}}>
                           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                             <span style={{fontSize:15,color:d[i]?"rgba(255,255,255,.3)":"#e8e0f0",textDecoration:d[i]?"line-through":"none",fontWeight:600}}>{ex.name}</span>
-                            <span style={{fontSize:13,color:"rgba(255,255,255,.3)",background:"rgba(255,255,255,.06)",borderRadius:4,padding:"1px 5px",flexShrink:0}}>{ex.sets}</span>
+                            {ex.sets&&<span style={{fontSize:13,color:"rgba(255,255,255,.3)",background:"rgba(255,255,255,.06)",borderRadius:4,padding:"1px 5px",flexShrink:0}}>{ex.sets}</span>}
                           </div>
-                          <div style={{fontSize:13,opacity:.3,marginTop:1}}>{ex.note}</div>
+                          {ex.note&&<div style={{fontSize:13,opacity:.3,marginTop:1}}>{ex.note}</div>}
                         </div>
                       </div>
                     ))}
@@ -10052,11 +10359,50 @@ function WorkoutTab({workoutData,setWorkoutData,checkBox,MONTH_NAMES}){
     <div style={{marginBottom:14}}>
       <div style={{display:"flex",alignItems:"center",marginBottom:8}}>
         <div style={{fontSize:14,fontWeight:900,opacity:.4,letterSpacing:1,flex:1}}>MONTHLY GOALS</div>
+        <button onClick={()=>setWoEditMode(woEditMode==="monthly"?null:"monthly")}
+          style={{background:woEditMode==="monthly"?"rgba(167,139,250,.2)":"rgba(255,255,255,.06)",border:`1px solid ${woEditMode==="monthly"?"rgba(167,139,250,.4)":"rgba(255,255,255,.1)"}`,borderRadius:6,padding:"3px 8px",fontSize:12,color:woEditMode==="monthly"?"#a78bfa":"#aaa",cursor:"pointer",fontWeight:700,marginRight:8}}>
+          {woEditMode==="monthly"?"Done":"✎ Edit"}
+        </button>
         <span style={{fontSize:14,color:woMonthlyDone===woMonthlyTotal?"#43e97b":"rgba(255,255,255,.35)",fontWeight:700}}>{woMonthlyDone}/{woMonthlyTotal}</span>
       </div>
+
+      {woEditMode==="monthly"&&<div style={{background:"rgba(167,139,250,.06)",border:"1px solid rgba(167,139,250,.15)",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
+        {activeWoMonthly.map((t,idx)=>(
+          <div key={idx} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,.04)"}}>
+            {woEditingItem?.section==="monthly"&&woEditingItem?.index===idx
+              ?<>
+                <input value={woEditingItem.value} onChange={e=>setWoEditingItem({...woEditingItem,value:e.target.value})}
+                  onKeyDown={e=>{if(e.key==="Enter"&&woEditingItem.value.trim()){setWoCustomTasks(p=>{const m=[...(p.monthly||defaultWoTasks.monthly)];m[idx]={...m[idx],label:woEditingItem.value.trim()};return{...p,monthly:m};});setWoEditingItem(null);}}}
+                  style={{flex:1,background:"rgba(255,255,255,.08)",border:"1px solid rgba(167,139,250,.3)",borderRadius:6,padding:"5px 8px",color:"#e8e0f0",fontSize:14,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}} autoFocus/>
+                <button onClick={()=>{if(woEditingItem.value.trim()){setWoCustomTasks(p=>{const m=[...(p.monthly||defaultWoTasks.monthly)];m[idx]={...m[idx],label:woEditingItem.value.trim()};return{...p,monthly:m};});setWoEditingItem(null);}}}
+                  style={{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",borderRadius:6,padding:"3px 8px",fontSize:13,color:"#43e97b",cursor:"pointer",fontWeight:700}}>✓</button>
+                <button onClick={()=>setWoEditingItem(null)}
+                  style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,padding:"3px 8px",fontSize:13,color:"#aaa",cursor:"pointer"}}>✕</button>
+              </>
+              :<>
+                <span style={{flex:1,fontSize:14,color:"#e8e0f0"}}>{t.label}</span>
+                <button onClick={()=>setWoEditingItem({section:"monthly",index:idx,value:t.label})}
+                  style={{background:"none",border:"none",fontSize:14,color:"#a78bfa",cursor:"pointer",padding:"2px 6px"}}>✎</button>
+                <button onClick={()=>{if(confirm("Delete this goal?")){setWoCustomTasks(p=>{const m=[...(p.monthly||defaultWoTasks.monthly)];m.splice(idx,1);return{...p,monthly:m};});}}}
+                  style={{background:"none",border:"none",fontSize:14,color:"#f5576c",cursor:"pointer",padding:"2px 6px"}}>✕</button>
+              </>
+            }
+          </div>
+        ))}
+        <div style={{display:"flex",gap:6,marginTop:6}}>
+          <input value={woEditingItem?.section==="addMonthly"?woEditingItem.value:""}
+            onChange={e=>setWoEditingItem({section:"addMonthly",value:e.target.value})}
+            onKeyDown={e=>{if(e.key==="Enter"&&woEditingItem?.value?.trim()){const id="wm_"+Date.now();setWoCustomTasks(p=>({...p,monthly:[...(p.monthly||defaultWoTasks.monthly),{id,label:woEditingItem.value.trim()}]}));setWoEditingItem(null);}}}
+            placeholder="+ Add monthly goal…"
+            style={{flex:1,background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,padding:"6px 8px",color:"#e8e0f0",fontSize:14,outline:"none",fontFamily:"'Nunito','Segoe UI',sans-serif"}}/>
+          <button onClick={()=>{if(woEditingItem?.section==="addMonthly"&&woEditingItem?.value?.trim()){const id="wm_"+Date.now();setWoCustomTasks(p=>({...p,monthly:[...(p.monthly||defaultWoTasks.monthly),{id,label:woEditingItem.value.trim()}]}));setWoEditingItem(null);}}}
+            style={{background:"linear-gradient(135deg,#a78bfa,#667eea)",border:"none",borderRadius:6,padding:"6px 10px",fontSize:14,color:"#fff",cursor:"pointer",fontWeight:800}}>+</button>
+        </div>
+      </div>}
+
       <div style={{background:"rgba(255,255,255,.02)",border:"1px solid rgba(255,255,255,.07)",borderRadius:12,overflow:"hidden"}}>
         <div style={{padding:"4px 12px 8px"}}>
-          {WO_MONTHLY.map(t=>{const done=!!woData.monthly[t.id];return(
+          {activeWoMonthly.map(t=>{const done=!!woData.monthly[t.id];return(
             <div key={t.id} className="clean-item" onClick={()=>toggleWoMonthly(t.id)}
               style={{display:"flex",alignItems:"center",gap:10,padding:"8px 4px",borderBottom:"1px solid rgba(255,255,255,.04)",cursor:"pointer"}}>
               {checkBox(done,"#a78bfa")}
