@@ -7654,14 +7654,11 @@ const NotebookPanel=()=>{
             {(()=>{const pixels=getPixels();const colorCounts={};Object.values(pixels).forEach(color=>{colorCounts[color]=(colorCounts[color]||0)+1;});
               const ranked=Object.entries(colorCounts).sort((a,b)=>b[1]-a[1]);
               if(ranked.length>0){
-                const shown=ranked.slice(0,12);
-                return <>{shown.map(([color])=>{const pm=PIXEL_PALETTE.find(p2=>p2.c===color);const lum=parseInt(color.slice(1,3),16)*.299+parseInt(color.slice(3,5),16)*.587+parseInt(color.slice(5,7),16)*.114;
+                return ranked.map(([color])=>{const pm=PIXEL_PALETTE.find(p2=>p2.c===color);const lum=parseInt(color.slice(1,3),16)*.299+parseInt(color.slice(3,5),16)*.587+parseInt(color.slice(5,7),16)*.114;
                   return(<div key={color} onClick={()=>{setPixelColor(color);setPixelEraser(false);}} title={pm?`DMC ${pm.n} — ${pm.nm} (${colorCounts[color]}px)`:`Custom (${colorCounts[color]}px)`}
                   style={{...cSwatch(color,pixelColor===color&&!pixelEraser,30),display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
                   <span style={{fontSize:7,fontWeight:800,color:lum>128?"rgba(0,0,0,.6)":"rgba(255,255,255,.7)",lineHeight:1,textAlign:"center"}}>{pm?pm.n:""}</span>
-                </div>);})}
-                  {ranked.length>12&&<button onClick={()=>{setShowPixPicker(v=>!v);setPixPaletteSearch("");}} style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,fontSize:9,color:"#a8b4f0",fontWeight:700,cursor:"pointer",padding:"4px 6px"}}>+{ranked.length-12}</button>}
-                </>;
+                </div>);});
               }
               return [
                 PIXEL_PALETTE.find(p=>p.n==="321"),PIXEL_PALETTE.find(p=>p.n==="797"),PIXEL_PALETTE.find(p=>p.n==="973"),
