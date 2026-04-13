@@ -7651,12 +7651,22 @@ const NotebookPanel=()=>{
             <button onClick={()=>setPixelEraser(e=>!e)} style={tbtn(pixelEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",padding:"6px 10px"}:{color:"#ccc",padding:"6px 10px"})}>
               {pixelEraser?<span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span>:"✏️"}</button>
             <div style={{width:1,height:24,background:"rgba(255,255,255,.1)"}}/>
-            {[
-              PIXEL_PALETTE.find(p=>p.n==="321"),PIXEL_PALETTE.find(p=>p.n==="797"),PIXEL_PALETTE.find(p=>p.n==="973"),
-              PIXEL_PALETTE.find(p=>p.n==="699"),PIXEL_PALETTE.find(p=>p.n==="740"),PIXEL_PALETTE.find(p=>p.n==="550"),
-              PIXEL_PALETTE.find(p=>p.n==="310"),PIXEL_PALETTE.find(p=>p.n==="414"),PIXEL_PALETTE.find(p=>p.n==="Blanc")
-            ].filter(Boolean).map(p=>(<div key={p.n} onClick={()=>{setPixelColor(p.c);setPixelEraser(false);}} title={`DMC ${p.n} ${p.nm}`}
-              style={cSwatch(p.c,pixelColor===p.c&&!pixelEraser,28)}/>))}
+            {(()=>{const pixels=getPixels();const colorCounts={};Object.values(pixels).forEach(color=>{colorCounts[color]=(colorCounts[color]||0)+1;});
+              const ranked=Object.entries(colorCounts).sort((a,b)=>b[1]-a[1]);
+              if(ranked.length>0){
+                const shown=ranked.slice(0,10);
+                return <>{shown.map(([color])=>(<div key={color} onClick={()=>{setPixelColor(color);setPixelEraser(false);}}
+                  style={cSwatch(color,pixelColor===color&&!pixelEraser,28)}/>))}
+                  {ranked.length>10&&<span style={{fontSize:9,opacity:.3,fontWeight:700}}>+{ranked.length-10}</span>}
+                </>;
+              }
+              return [
+                PIXEL_PALETTE.find(p=>p.n==="321"),PIXEL_PALETTE.find(p=>p.n==="797"),PIXEL_PALETTE.find(p=>p.n==="973"),
+                PIXEL_PALETTE.find(p=>p.n==="699"),PIXEL_PALETTE.find(p=>p.n==="740"),PIXEL_PALETTE.find(p=>p.n==="550"),
+                PIXEL_PALETTE.find(p=>p.n==="310"),PIXEL_PALETTE.find(p=>p.n==="414"),PIXEL_PALETTE.find(p=>p.n==="Blanc")
+              ].filter(Boolean).map(p=>(<div key={p.n} onClick={()=>{setPixelColor(p.c);setPixelEraser(false);}} title={`DMC ${p.n} ${p.nm}`}
+                style={cSwatch(p.c,pixelColor===p.c&&!pixelEraser,28)}/>));
+            })()}
             <button onClick={()=>{setShowPixPicker(v=>!v);setPixPaletteSearch("");}} style={tbtn({padding:"6px 10px",fontSize:11,color:showPixPicker?"#feca57":"#888"})}>{showPixPicker?"▼":"🎨"}</button>
           </>}
           {(artStyle==="vector"||artStyle==="poly")&&<>
