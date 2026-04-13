@@ -6149,6 +6149,8 @@ const NotebookPanel=()=>{
   const[drawPaletteSearch,setDrawPaletteSearch]=useState("");
   const[pixelColor,setPixelColor]=useState("#f5576c");
   const[pixelEraser,setPixelEraser]=useState(false);
+  const[pixEyedropper,setPixEyedropper]=useState(false);
+  const pixEyedropperRef2=React.useRef(false);
   // Vector art state
   const[vecImporting,setVecImporting]=useState(false);
   const[vecShowPicker,setVecShowPicker]=useState(false);
@@ -6721,6 +6723,8 @@ const NotebookPanel=()=>{
     if(pixStrokeChanges.current.length>0){
       pixelUndoRef.current.push([...pixStrokeChanges.current]);
       pixelRedoRef.current=[];
+      // Force re-render so converted palette updates with new/removed colors
+      syncState();
     }
     pixStrokeChanges.current=[];
   };
@@ -6735,7 +6739,7 @@ const NotebookPanel=()=>{
     }
     d.pages[nbPageIdx].pixels=pixels;writeNb(d);
     pixelRedoRef.current.push(redoEntries.reverse());
-    drawPixelGrid();};
+    drawPixelGrid();syncState();};
   const redoPixel=()=>{if(!pixelRedoRef.current.length)return;const stroke=pixelRedoRef.current.pop();
     const d=readNb();if(!d.pages?.[nbPageIdx])return;const pixels=d.pages[nbPageIdx].pixels||{};
     const undoEntries=[];
@@ -6745,8 +6749,9 @@ const NotebookPanel=()=>{
     }
     d.pages[nbPageIdx].pixels=pixels;writeNb(d);
     pixelUndoRef.current.push(undoEntries);
-    drawPixelGrid();};
+    drawPixelGrid();syncState();};
   const pixColorRef=React.useRef(pixelColor);pixColorRef.current=pixelColor;
+  pixEyedropperRef2.current=pixEyedropper;
   const pixEraserRef=React.useRef(pixelEraser);pixEraserRef.current=pixelEraser;
   const pixStartPos=React.useRef(null);const pixMoved=React.useRef(false);const pixCancelled=React.useRef(false);
   const pixLastCell=React.useRef(null);
@@ -6807,6 +6812,14 @@ const NotebookPanel=()=>{
       pixPaintedCells.current=new Set();
       const cell=cellFromTouchFn(t);
       if(cell){pixLastCell.current=cell;pixStartPos.current=cell;}
+      // Eyedropper mode: pick color from tapped cell
+      if(pixEyedropperRef2.current&&cell){
+        const d=readNb();const pixels=d.pages?.[nbPageIdx]?.pixels||{};
+        const key=`${cell.row}-${cell.col}`;const color=pixels[key];
+        if(color){setPixelColor(color);setPixelEraser(false);}
+        setPixEyedropper(false);pixIsPainting.current=false;
+        if(e.preventDefault)e.preventDefault();return;
+      }
       if(!e.touches){
         // Mouse: preventDefault and paint immediately
         e.preventDefault();
@@ -7519,7 +7532,7 @@ const NotebookPanel=()=>{
       {/* Main image area */}
       <div ref={(el)=>{artScrollRef.current=el;if(el)pixScrollRef.current=el;}} style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch",padding:artStyle==="pixel"?0:8}}>
         {artStyle==="pixel"&&<div style={{transform:`scale(${pageZoom})`,transformOrigin:"top left",width:cW/pageZoom,height:cH/pageZoom,minWidth:cW,minHeight:cH,position:"relative"}}>
-          <canvas ref={pixCanvasCallbackRef} width={cW} height={cH} style={{width:cW,height:cH,touchAction:"none",cursor:"crosshair",display:"block",imageRendering:"pixelated"}}/>
+          <canvas ref={pixCanvasCallbackRef} width={cW} height={cH} style={{width:cW,height:cH,touchAction:"none",cursor:pixEyedropper?"crosshair":"default",display:"block",imageRendering:"pixelated"}}/>
           {page.pixOriginal&&vecOrigOpacity>0&&<img src={page.pixOriginal} style={{position:"absolute",top:0,left:0,width:cW,height:cH,opacity:vecOrigOpacity,pointerEvents:"none",imageRendering:"pixelated"}}/>}
         </div>}
         {artStyle==="vector"&&<div style={{position:"relative",display:"block",margin:"0 auto",minWidth:hasVecContent?undefined:300,minHeight:hasVecContent?undefined:300,width:hasVecContent?vecImgW*pageZoom:"fit-content"}}>
@@ -7680,7 +7693,7 @@ const NotebookPanel=()=>{
               const ranked=Object.entries(colorCounts).sort((a,b)=>b[1]-a[1]);
               if(ranked.length>0){
                 return ranked.map(([color])=>{const pm=PIXEL_PALETTE.find(p2=>p2.c===color);const lum=parseInt(color.slice(1,3),16)*.299+parseInt(color.slice(3,5),16)*.587+parseInt(color.slice(5,7),16)*.114;
-                  return(<div key={color} onClick={()=>{setPixelColor(color);setPixelEraser(false);}} title={pm?`DMC ${pm.n} — ${pm.nm} (${colorCounts[color]}px)`:`Custom (${colorCounts[color]}px)`}
+                  return(<div key={color} onClick={()=>{setPixelColor(color);setPixelEraser(false);setPixEyedropper(false);}} title={pm?`DMC ${pm.n} — ${pm.nm} (${colorCounts[color]}px)`:`Custom (${colorCounts[color]}px)`}
                   style={{...cSwatch(color,pixelColor===color&&!pixelEraser,30),display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
                   <span style={{fontSize:7,fontWeight:800,color:lum>128?"rgba(0,0,0,.6)":"rgba(255,255,255,.7)",lineHeight:1,textAlign:"center"}}>{pm?pm.n:""}</span>
                 </div>);});
@@ -7690,7 +7703,7 @@ const NotebookPanel=()=>{
                 PIXEL_PALETTE.find(p=>p.n==="699"),PIXEL_PALETTE.find(p=>p.n==="740"),PIXEL_PALETTE.find(p=>p.n==="550"),
                 PIXEL_PALETTE.find(p=>p.n==="310"),PIXEL_PALETTE.find(p=>p.n==="414"),PIXEL_PALETTE.find(p=>p.n==="Blanc")
               ].filter(Boolean).map(p=>{const lum=parseInt(p.c.slice(1,3),16)*.299+parseInt(p.c.slice(3,5),16)*.587+parseInt(p.c.slice(5,7),16)*.114;
-                return(<div key={p.n} onClick={()=>{setPixelColor(p.c);setPixelEraser(false);}} title={`DMC ${p.n} ${p.nm}`}
+                return(<div key={p.n} onClick={()=>{setPixelColor(p.c);setPixelEraser(false);setPixEyedropper(false);}} title={`DMC ${p.n} ${p.nm}`}
                 style={{...cSwatch(p.c,pixelColor===p.c&&!pixelEraser,30),display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <span style={{fontSize:7,fontWeight:800,color:lum>128?"rgba(0,0,0,.6)":"rgba(255,255,255,.7)",lineHeight:1}}>{p.n}</span>
               </div>);});
@@ -7725,7 +7738,7 @@ const NotebookPanel=()=>{
       {showPixPicker&&<div style={{padding:"4px 10px 4px",flexShrink:0}}>
         <input value={pixPaletteSearch} onChange={e=>setPixPaletteSearch(e.target.value)} placeholder="Search DMC # or color name..." style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid rgba(255,255,255,.12)",background:"rgba(255,255,255,.06)",color:"#e8e0f0",fontSize:11,outline:"none",marginBottom:4,boxSizing:"border-box"}}/>
         <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gap:2,maxHeight:90,overflowY:"auto",overflowX:"hidden"}}>
-          {(pixPaletteSearch.trim()?PIXEL_PALETTE.filter(p=>{const q=pixPaletteSearch.toLowerCase();return p.n.toLowerCase().includes(q)||p.nm.toLowerCase().includes(q);}):PIXEL_PALETTE).map(p=>{const selColor=artStyle==="pixel"?pixelColor:vecDrawColor;const isSel=p.c===selColor;return(<div key={p.n+p.c} onClick={()=>{if(artStyle==="pixel"){setPixelColor(p.c);setPixelEraser(false);}else{setVecDrawColor(p.c);setVecDrawEraser(false);setVecEyedropper(false);}}} title={`DMC ${p.n} — ${p.nm}`}
+          {(pixPaletteSearch.trim()?PIXEL_PALETTE.filter(p=>{const q=pixPaletteSearch.toLowerCase();return p.n.toLowerCase().includes(q)||p.nm.toLowerCase().includes(q);}):PIXEL_PALETTE).map(p=>{const selColor=artStyle==="pixel"?pixelColor:vecDrawColor;const isSel=p.c===selColor;return(<div key={p.n+p.c} onClick={()=>{if(artStyle==="pixel"){setPixelColor(p.c);setPixelEraser(false);setPixEyedropper(false);}else{setVecDrawColor(p.c);setVecDrawEraser(false);setVecEyedropper(false);}}} title={`DMC ${p.n} — ${p.nm}`}
             style={{position:"relative",aspectRatio:"1",borderRadius:3,background:p.c,border:isSel?"2px solid #feca57":(parseInt(p.c.slice(1,3),16)*.299+parseInt(p.c.slice(3,5),16)*.587+parseInt(p.c.slice(5,7),16)*.114)<80?"1px solid rgba(255,255,255,.35)":"1px solid rgba(0,0,0,.15)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",minWidth:0}}>
             <span style={{fontSize:6,fontWeight:700,color:(parseInt(p.c.slice(1,3),16)*.299+parseInt(p.c.slice(3,5),16)*.587+parseInt(p.c.slice(5,7),16)*.114)>128?"rgba(0,0,0,.5)":"rgba(255,255,255,.6)",lineHeight:1,textAlign:"center",overflow:"hidden"}}>{p.n}</span>
           </div>);})}
@@ -7741,6 +7754,7 @@ const NotebookPanel=()=>{
         {artStyle==="pixel"&&<>
           <button onClick={undoPixel} style={tbtn({color:"#aaa"})}>↩</button>
           <button onClick={redoPixel} style={tbtn({color:"#aaa"})}>↪</button>
+          <button onClick={()=>{setPixEyedropper(e=>!e);setPixelEraser(false);}} style={tbtn(pixEyedropper?{background:"rgba(67,233,123,.2)",border:"1px solid rgba(67,233,123,.4)",color:"#43e97b"}:{color:"#888"})}>💧</button>
         </>}
         {(artStyle==="vector"||artStyle==="poly")&&<>
           <button onClick={vecUndoDraw} style={tbtn({color:"#aaa"})}>↩</button>
