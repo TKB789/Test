@@ -7439,164 +7439,73 @@ const NotebookPanel=()=>{
         if(win){win.document.write(`<html><head><title>${(page.title||"Art").replace(/</g,"&lt;")}</title><style>@media print{body{margin:0}.no-print{display:none!important}}body{font-family:sans-serif;margin:0;padding:12px;display:flex;flex-direction:column;align-items:center}img{max-width:100%;height:auto}</style></head><body><h3 style="margin:4px 0">${(page.title||"Art").replace(/</g,"&lt;")}</h3><img src="${imgUrl}" style="max-width:100%;height:auto"/><div style="margin:8px 0;font-size:12px;display:flex;flex-wrap:wrap;gap:10px">${legendHtml}</div><div class="no-print"><button onclick="window.print()" style="padding:10px 24px;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid #ccc">🖨️ Print / Save PDF</button></div></body></html>`);win.document.close();}
       };
       if(!showNums){openPrintWindow(imgSrc);return;}
-      // ── Build color index: palette color → number ──
+      // ── Build vc color → label number map (vc index) ──
       const htr2=hex=>[parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];
-      const colorToNum=new Map();
-      vc.forEach((c,i)=>{colorToNum.set(c.color.toLowerCase(),i+1);});
-      // Helper: find nearest palette color for an RGB value
-      const palRgb=vc.map(c=>({color:c.color.toLowerCase(),rgb:htr2(c.color)}));
-      const nearestPalIdx=(cr,cg,cb)=>{let bd=Infinity,bi=0;palRgb.forEach((p,i)=>{const d=(cr-p.rgb[0])**2+(cg-p.rgb[1])**2+(cb-p.rgb[2])**2;if(d<bd){bd=d;bi=i;}});return bi;};
-      // Load the art image to draw on
+      const vcRgb=vc.map(c=>htr2(c.color));
+      // Map any RGB pixel to the nearest vc palette entry INDEX (0-based), returns {idx, color}
+      const nearestVcIdx=(r,g,b)=>{let bd=Infinity,bi=0;vcRgb.forEach(([pr,pg,pb],i)=>{const d2=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d2<bd){bd=d2;bi=i;}});return bi;};
+      // Helper to draw a number label
+      const drawNum=(ctx,num,cx,cy,color,fs)=>{
+        const lum=parseInt(color.slice(1,3),16)*.299+parseInt(color.slice(3,5),16)*.587+parseInt(color.slice(5,7),16)*.114;
+        ctx.font=`bold ${fs}px sans-serif`;
+        ctx.strokeStyle=lum>128?"rgba(0,0,0,.85)":"rgba(255,255,255,.85)";ctx.lineWidth=Math.max(2.5,fs/3.5);
+        ctx.strokeText(String(num),cx,cy);
+        ctx.fillStyle=lum>128?"#000":"#fff";
+        ctx.fillText(String(num),cx,cy);
+      };
       const artImg=new Image();artImg.onload=()=>{
         const w=artImg.width,h=artImg.height;
-        // Scale up for crisp printing (target ~2400px on longest side)
         const printScale=Math.max(1,Math.min(4,Math.round(2400/Math.max(w,h))));
         const pw=w*printScale,ph=h*printScale;
         const tc2=document.createElement("canvas");tc2.width=pw;tc2.height=ph;
         const tctx2=tc2.getContext("2d");
         tctx2.imageSmoothingEnabled=false;
         tctx2.drawImage(artImg,0,0,pw,ph);
-        if(artStyle==="poly"&&pg.polyTriGeo&&pg.polyTriGeo.length>0){
-          // ═══ POLY ART: Use stored triangle geometry for crisp numbers ═══
-          const triGeo=pg.polyTriGeo;
-          const imgW=pg.polyW||w, imgH=pg.polyH||h;
-          const sx=pw/imgW, sy=ph/imgH;
-          // Build palette index from stored color indices
-          const fullPal=PIXEL_PALETTE.map(p=>p.c);
-          // Group triangles by color, pick the largest triangle per color for number placement
-          // Also place numbers in additional large triangles for coverage
-          const colorGroups=new Map();
-          triGeo.forEach(t=>{
-            if(!colorGroups.has(t.ci))colorGroups.set(t.ci,[]);
-            colorGroups.get(t.ci).push(t);
-          });
-          const fontSize2=Math.max(12,Math.round(Math.min(pw,ph)/35));
-          tctx2.font=`bold ${fontSize2}px sans-serif`;tctx2.textAlign="center";tctx2.textBaseline="middle";
-          colorGroups.forEach((triangles,ci)=>{
-            const palColor=(ci<fullPal.length)?fullPal[ci]:"#888";
-            const num=colorToNum.get(palColor.toLowerCase());
-            if(!num)return;
-            // Sort by area descending, place number in largest triangles
-            triangles.sort((a,b)=>b.a-a.a);
-            // Place in every Nth large triangle for good coverage
-            const totalArea=triangles.reduce((s,t)=>s+t.a,0);
-            const minAreaForLabel=Math.max(totalArea*0.005,200);
-            let placed=0;
-            for(let i=0;i<triangles.length&&placed<Math.max(1,Math.ceil(triangles.length/15));i++){
-              const t=triangles[i];
-              if(t.a<minAreaForLabel&&placed>0)break;
-              const cx=t.cx*sx, cy=t.cy*sy;
-              const lum=parseInt(palColor.slice(1,3),16)*.299+parseInt(palColor.slice(3,5),16)*.587+parseInt(palColor.slice(5,7),16)*.114;
-              const numStr=String(num);
-              // Adaptive font size based on triangle area
-              const triFs=Math.max(9,Math.min(fontSize2,Math.round(Math.sqrt(t.a*sx*sy)*0.35)));
-              tctx2.font=`bold ${triFs}px sans-serif`;
-              tctx2.strokeStyle=lum>128?"rgba(0,0,0,.8)":"rgba(255,255,255,.8)";tctx2.lineWidth=Math.max(2,triFs/4);
-              tctx2.strokeText(numStr,cx,cy);
-              tctx2.fillStyle=lum>128?"#000":"#fff";
-              tctx2.fillText(numStr,cx,cy);
-              placed++;
-            }
-          });
-        } else if(artStyle==="vector"&&pg.vectorRegions&&pg.vectorRegions.length>0){
-          // ═══ FLAT ART: Use stored region centroids for crisp numbers ═══
-          const regions=pg.vectorRegions;
-          const fullPal=PIXEL_PALETTE.map(p=>p.c);
-          // Scale factor: regions were computed at generation resolution
-          // The image might have been saved at different resolution, so scale by pw/original
-          const fontSize2=Math.max(12,Math.round(Math.min(pw,ph)/35));
-          tctx2.font=`bold ${fontSize2}px sans-serif`;tctx2.textAlign="center";tctx2.textBaseline="middle";
-          // Group regions by color, sort by size
-          const colorGroups=new Map();
-          regions.forEach(r=>{
-            if(!colorGroups.has(r.ci))colorGroups.set(r.ci,[]);
-            colorGroups.get(r.ci).push(r);
-          });
-          colorGroups.forEach((regs,ci)=>{
-            const palColor=(ci<fullPal.length)?fullPal[ci]:"#888";
-            const num=colorToNum.get(palColor.toLowerCase());
-            if(!num)return;
-            regs.sort((a,b)=>b.size-a.size);
-            const totalPx=regs.reduce((s,r)=>s+r.size,0);
-            const minPxForLabel=Math.max(totalPx*0.02,100);
-            let placed=0;
-            for(let i=0;i<regs.length&&placed<Math.max(1,Math.ceil(regs.length/8));i++){
-              const r=regs[i];
-              if(r.size<minPxForLabel&&placed>0)break;
-              // Scale centroid from generation coords to print coords
-              const cx=r.cx*printScale, cy=r.cy*printScale;
-              const lum=parseInt(palColor.slice(1,3),16)*.299+parseInt(palColor.slice(3,5),16)*.587+parseInt(palColor.slice(5,7),16)*.114;
-              const numStr=String(num);
-              const regFs=Math.max(10,Math.min(fontSize2,Math.round(Math.sqrt(r.size*printScale*printScale)*0.04)));
-              tctx2.font=`bold ${regFs}px sans-serif`;
-              tctx2.strokeStyle=lum>128?"rgba(0,0,0,.8)":"rgba(255,255,255,.8)";tctx2.lineWidth=Math.max(2,regFs/4);
-              tctx2.strokeText(numStr,cx,cy);
-              tctx2.fillStyle=lum>128?"#000":"#fff";
-              tctx2.fillText(numStr,cx,cy);
-              placed++;
-            }
-          });
-        } else {
-          // ═══ FALLBACK: Runtime connected-component region detection ═══
-          // Works for art created before geometry was stored
-          // Downscale for faster processing, then map centroids back up
-          const dsF=2; // downsample factor for speed
-          const dw=Math.ceil(pw/dsF),dh=Math.ceil(ph/dsF);
-          const dsCanvas=document.createElement("canvas");dsCanvas.width=dw;dsCanvas.height=dh;
-          const dsCtx=dsCanvas.getContext("2d");dsCtx.drawImage(artImg,0,0,dw,dh);
-          const dsData=dsCtx.getImageData(0,0,dw,dh).data;
-          // Quantize each pixel to nearest palette color
-          const qGrid=new Int16Array(dw*dh);
-          for(let y=0;y<dh;y++)for(let x=0;x<dw;x++){
-            const idx4=(y*dw+x)*4;
-            qGrid[y*dw+x]=nearestPalIdx(dsData[idx4],dsData[idx4+1],dsData[idx4+2]);
+        tctx2.textAlign="center";tctx2.textBaseline="middle";
+        // ── Quantize the image pixels to vc palette indices ──
+        // Work at original resolution for speed, scale centroids to print res
+        const qCanvas=document.createElement("canvas");qCanvas.width=w;qCanvas.height=h;
+        const qCtx=qCanvas.getContext("2d");qCtx.drawImage(artImg,0,0,w,h);
+        const qData=qCtx.getImageData(0,0,w,h).data;
+        const qGrid=new Uint8Array(w*h); // vc palette index per pixel
+        for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+          const i4=(y*w+x)*4;
+          qGrid[y*w+x]=nearestVcIdx(qData[i4],qData[i4+1],qData[i4+2]);
+        }
+        // ── Connected-component flood fill ──
+        // Find every distinct contiguous region of same vc-color
+        const visited=new Uint8Array(w*h);
+        const regions=[]; // [{vcIdx, cx, cy, size}]
+        const minPx=Math.max(6,Math.round(w*h/4000));
+        for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+          const idx=y*w+x;
+          if(visited[idx])continue;
+          const ci=qGrid[idx];
+          const stack=[idx];visited[idx]=1;
+          let sx=0,sy=0,cnt=0;
+          while(stack.length>0){
+            const cur=stack.pop();const cy2=Math.floor(cur/w),cx2=cur%w;
+            sx+=cx2;sy+=cy2;cnt++;
+            if(cx2>0&&!visited[cur-1]&&qGrid[cur-1]===ci){visited[cur-1]=1;stack.push(cur-1);}
+            if(cx2<w-1&&!visited[cur+1]&&qGrid[cur+1]===ci){visited[cur+1]=1;stack.push(cur+1);}
+            if(cy2>0&&!visited[cur-w]&&qGrid[cur-w]===ci){visited[cur-w]=1;stack.push(cur-w);}
+            if(cy2<h-1&&!visited[cur+w]&&qGrid[cur+w]===ci){visited[cur+w]=1;stack.push(cur+w);}
           }
-          // Connected-component flood fill to find regions
-          const visited=new Uint8Array(dw*dh);
-          const regions=[]; // [{palIdx, cx, cy, size}]
-          const minPx=Math.max(8,Math.round(dw*dh/3000));
-          for(let y=0;y<dh;y++)for(let x=0;x<dw;x++){
-            const idx=y*dw+x;
-            if(visited[idx])continue;
-            const ci=qGrid[idx];
-            const queue=[idx];visited[idx]=1;
-            let sx=0,sy=0,cnt=0;
-            while(queue.length>0){
-              const cur=queue.pop();const cy2=Math.floor(cur/dw),cx2=cur%dw;
-              sx+=cx2;sy+=cy2;cnt++;
-              if(cx2>0&&!visited[cur-1]&&qGrid[cur-1]===ci){visited[cur-1]=1;queue.push(cur-1);}
-              if(cx2<dw-1&&!visited[cur+1]&&qGrid[cur+1]===ci){visited[cur+1]=1;queue.push(cur+1);}
-              if(cy2>0&&!visited[cur-dw]&&qGrid[cur-dw]===ci){visited[cur-dw]=1;queue.push(cur-dw);}
-              if(cy2<dh-1&&!visited[cur+dw]&&qGrid[cur+dw]===ci){visited[cur+dw]=1;queue.push(cur+dw);}
-            }
-            if(cnt>=minPx){
-              regions.push({palIdx:ci,cx:Math.round(sx/cnt*dsF*printScale),cy:Math.round(sy/cnt*dsF*printScale),size:cnt});
-            }
+          if(cnt>=minPx){
+            regions.push({vcIdx:ci,cx:sx/cnt,cy:sy/cnt,size:cnt});
           }
-          // Draw numbers: group by palette color, place in all sufficiently large regions
-          const fontSize2=Math.max(12,Math.round(Math.min(pw,ph)/35));
-          tctx2.textAlign="center";tctx2.textBaseline="middle";
-          const rByColor=new Map();
-          regions.forEach(r=>{if(!rByColor.has(r.palIdx))rByColor.set(r.palIdx,[]);rByColor.get(r.palIdx).push(r);});
-          rByColor.forEach((regs,palIdx)=>{
-            const palColor=palRgb[palIdx]?.color;
-            const num=palColor?colorToNum.get(palColor):null;
-            if(!num)return;
-            regs.sort((a,b)=>b.size-a.size);
-            const totalPx=regs.reduce((s,r)=>s+r.size,0);
-            const labelMin=Math.max(totalPx*0.008,minPx);
-            for(let i=0;i<regs.length;i++){
-              const r=regs[i];
-              if(r.size<labelMin&&i>0)break;
-              const lum=parseInt(palColor.slice(1,3),16)*.299+parseInt(palColor.slice(3,5),16)*.587+parseInt(palColor.slice(5,7),16)*.114;
-              const fs=Math.max(9,Math.min(fontSize2,Math.round(Math.sqrt(r.size*dsF*dsF)*0.5)));
-              tctx2.font=`bold ${fs}px sans-serif`;
-              tctx2.strokeStyle=lum>128?"rgba(0,0,0,.8)":"rgba(255,255,255,.8)";tctx2.lineWidth=Math.max(2,fs/4);
-              tctx2.strokeText(String(num),r.cx,r.cy);
-              tctx2.fillStyle=lum>128?"#000":"#fff";
-              tctx2.fillText(String(num),r.cx,r.cy);
-            }
-          });
+        }
+        // ── Draw numbers: one per region, sized to fit ──
+        const baseFontSize=Math.max(11,Math.round(Math.min(pw,ph)/30));
+        regions.sort((a,b)=>b.size-a.size); // draw largest first
+        for(const r of regions){
+          const num=r.vcIdx+1; // 1-indexed to match legend
+          const color=vc[r.vcIdx]?.color||"#888";
+          // Scale centroid from original coords to print coords
+          const cx=r.cx*printScale, cy=r.cy*printScale;
+          // Font size proportional to region area
+          const fs=Math.max(8,Math.min(baseFontSize,Math.round(Math.sqrt(r.size)*0.6*printScale)));
+          drawNum(tctx2,num,cx,cy,color,fs);
         }
         openPrintWindow(tc2.toDataURL("image/png"));
       };artImg.src=imgSrc;
