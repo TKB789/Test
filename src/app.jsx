@@ -1090,7 +1090,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){let ice=false;
         if(r===2&&c!==iceOpening)ice=true;else if(r>=3&&extraIce.has((r-3)*cols+c))ice=true;
         blocks.push({x:BD+gap+(cellW+gap)*c,y:topMargin+r*(cellH+gap),w:cellW,h:cellH,alive:true,unbreakable:ice,
-          emoji:ice?"❄️":FRUITS[Math.floor(Math.random()*FRUITS.length)]});}
+          emoji:ice?"🧊":FRUITS[Math.floor(Math.random()*FRUITS.length)]});}
       const pw=60+bonus*8;
       const paddleY=H-36;
       // Prize system
@@ -1185,8 +1185,10 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
         // Blocks
         s.blocks.forEach(bl=>{if(!bl.alive)return;
           ctx.fillStyle=bl.unbreakable?"rgba(150,200,255,.1)":"rgba(255,255,255,.04)";ctx.beginPath();ctx.roundRect(bl.x,bl.y,bl.w,bl.h,6);ctx.fill();
-          ctx.strokeStyle=bl.unbreakable?"rgba(150,200,255,.25)":"rgba(255,255,255,.08)";ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(bl.x,bl.y,bl.w,bl.h,6);ctx.stroke();
-          ctx.font=`${Math.min(bl.h-4,bl.w-4)}px sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";
+          ctx.strokeStyle=bl.unbreakable?"rgba(150,200,255,.25)":"rgba(255,255,255,.08)";ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(bl.x,bl.y,bl.w,bl.h,6);ctx.stroke();});
+        // Draw emojis in a separate pass on top so they aren't clipped by neighboring blocks
+        s.blocks.forEach(bl=>{if(!bl.alive)return;
+          ctx.font=`${Math.min(bl.h+2,bl.w-2)}px sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";
           ctx.fillText(bl.emoji,bl.x+bl.w/2,bl.y+bl.h/2+1);});
         // Paddle
         if(isFrozen){
@@ -1439,7 +1441,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
         </div>
         {/* Game end overlay - positioned over the grid */}
         {(gameOver||won)&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.7)",borderRadius:8}}>
-          <div style={{fontSize:28,fontWeight:900,color:won?"#43e97b":"#f5576c",textShadow:"0 2px 8px rgba(0,0,0,.5)"}}>{won?"🌈🍀 Luck Is On Your Side! 🏅🌈":"💩 Oh Poo-Hoo! Mud all over you!"}</div>
+          <div style={{fontSize:28,fontWeight:900,color:won?"#43e97b":"#f5576c",textShadow:"0 2px 8px rgba(0,0,0,.5)"}}>{won?"🌈🍀 Luck Is On Your Side!":"💩 Oh Poo-Hoo! Mud all over you!"}</div>
           {won&&<div style={{fontSize:16,color:"#feca57",fontWeight:800,marginTop:4}}>Time: {elapsed}s</div>}
           {won&&best>0&&elapsed<=best&&<div style={{fontSize:13,color:"#43e97b",fontWeight:700}}>🏆 Best!</div>}
           {won&&best>0&&elapsed>best&&<div style={{fontSize:12,opacity:.5}}>Best: {best}s</div>}
