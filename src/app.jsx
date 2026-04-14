@@ -1,4 +1,22 @@
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useCallback } = React;
+
+// ─── Responsive Screen Size Hook ─────────────────────────────────────────
+// Returns breakpoint info. Mobile (<520) is the default/original layout.
+// Tablet (520-899) and Desktop (900+) get enhanced layouts.
+// This ONLY adds — never changes anything at mobile widths.
+const useScreenSize = () => {
+  const getSize = () => {
+    const w = window.innerWidth;
+    return { w, isMobile: w < 520, isTablet: w >= 520 && w < 900, isDesktop: w >= 900, isWide: w >= 520 };
+  };
+  const [size, setSize] = useState(getSize);
+  useEffect(() => {
+    const onResize = () => setSize(getSize());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return size;
+};
 
 // ─── IndexedDB Storage Layer ─────────────────────────────────────────────
 // Replaces localStorage with IndexedDB for ~50-250MB+ storage (vs 5MB).
@@ -569,6 +587,22 @@ input,textarea,select{-webkit-appearance:none;border-radius:0}
 @keyframes sparkleFloat{0%{opacity:.6;transform:translateY(0) scale(.8)}50%{opacity:1;transform:translateY(-8px) scale(1.1)}100%{opacity:.6;transform:translateY(0) scale(.8)}}
 @keyframes coronaPulse{0%,100%{opacity:.5;transform:translate(-50%,-50%) scale(1)}50%{opacity:.9;transform:translate(-50%,-50%) scale(1.06)}}
 input::placeholder{color:rgba(255,255,255,.25)}
+
+/* ── Responsive: Tablet & Desktop enhancements ── */
+/* These ONLY activate above 520px — mobile layout is untouched */
+@media(min-width:520px){
+  body{background:#050510!important}
+  .zb-app{max-width:720px!important;border-left:1px solid rgba(255,255,255,.04);border-right:1px solid rgba(255,255,255,.04);box-shadow:0 0 80px rgba(102,126,234,.08)}
+  .zb-modal-inner{max-width:440px!important}
+  .zb-modal-wide{max-width:560px!important}
+  .zb-settings-panel{max-width:520px!important}
+}
+@media(min-width:900px){
+  .zb-app{max-width:960px!important;box-shadow:0 0 120px rgba(102,126,234,.1)}
+  .zb-modal-inner{max-width:500px!important}
+  .zb-modal-wide{max-width:680px!important}
+  .zb-settings-panel{max-width:600px!important}
+}
 `;
 
 const HealthBar=({percent,small})=>{
@@ -743,7 +777,7 @@ const ShareCard=({state,animal,filter="none",onClose,duelCode,onAddGoal})=>{
 
   return(
     <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{maxWidth:320,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
+      <div onClick={e=>e.stopPropagation()} className="zb-modal-inner" style={{maxWidth:320,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
         {/* Tab bar */}
         <div style={{display:"flex",gap:4,marginBottom:6}}>
           {[{id:"stats",label:"📊 Stats"},{id:"history",label:"📅 History"}].map(t=>(
@@ -906,7 +940,7 @@ const DuelPanel=({state,onClose,duelCode})=>{
 
   return (
     <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.8)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(135deg,#1a0a2e,#0d1b3e)",borderRadius:20,padding:20,maxWidth:340,width:"100%",color:"#fff",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.6)",border:"1px solid rgba(255,255,255,.08)",position:"relative",overflow:"hidden",maxHeight:"90vh",overflowY:"auto"}}>
+      <div onClick={e=>e.stopPropagation()} className="zb-modal-inner" style={{background:"linear-gradient(135deg,#1a0a2e,#0d1b3e)",borderRadius:20,padding:20,maxWidth:340,width:"100%",color:"#fff",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.6)",border:"1px solid rgba(255,255,255,.08)",position:"relative",overflow:"hidden",maxHeight:"90vh",overflowY:"auto"}}>
         {/* Close button */}
         <button onClick={onClose} style={{position:"absolute",top:12,right:12,background:"rgba(255,255,255,.08)",border:"none",borderRadius:8,width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#fff",fontSize:15,zIndex:10}}>✕</button>
         <div style={{position:"absolute",inset:0,background:"radial-gradient(circle at 30% 20%,rgba(102,126,234,.06) 0%,transparent 50%),radial-gradient(circle at 70% 80%,rgba(245,87,108,.06) 0%,transparent 50%)",pointerEvents:"none"}}/>
@@ -1997,7 +2031,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
   // ═══ GAME MENU ═══
   if(!game)return(
     <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.92)",display:"flex",flexDirection:"column"}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{flex:1,display:"flex",flexDirection:"column",maxWidth:420,width:"100%",margin:"0 auto",overflow:"hidden"}}>
+      <div onClick={e=>e.stopPropagation()} className="zb-modal-wide" style={{flex:1,display:"flex",flexDirection:"column",maxWidth:420,width:"100%",margin:"0 auto",overflow:"hidden"}}>
         <div style={{padding:"12px 16px 6px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div style={{fontSize:18,fontWeight:900,background:"linear-gradient(135deg,#f093fb,#f5576c,#feca57)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>🎮 Mini Games</div>
           <button onClick={onClose} style={{background:"rgba(255,255,255,.08)",border:"none",borderRadius:8,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#fff",fontSize:16}}>✕</button>
@@ -9191,7 +9225,7 @@ function DayPlanner({plannerData,plannerViewDate,setPlannerViewDate,MOODS,getPla
 
         {/* ═══ SECRET JOURNAL OVERLAY ═══ */}
         {journalOpen&&<div style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,.95)",display:"flex",flexDirection:"column"}} onClick={closeJournal}>
-          <div onClick={e=>e.stopPropagation()} style={{flex:1,display:"flex",flexDirection:"column",maxWidth:420,width:"100%",margin:"0 auto",overflow:"hidden"}}>
+          <div onClick={e=>e.stopPropagation()} className="zb-modal-wide" style={{flex:1,display:"flex",flexDirection:"column",maxWidth:420,width:"100%",margin:"0 auto",overflow:"hidden"}}>
 
             {/* ── PASSWORD GATE ── */}
             {!journalAuth&&hasPassword&&!journalSetup&&(
@@ -10381,6 +10415,8 @@ function WorkoutTab({workoutData,setWorkoutData,checkBox,MONTH_NAMES}){
 }
 
 function SpiritAnimals(){
+  const screen_=useScreenSize();
+  const isWide=screen_.isWide;
   const[appState,setAppState]=useState(()=>loadState());
   const[screen,setScreen]=useState(appState?"home":"welcome");
   const[showShare,setShowShare]=useState(false);const[showDuel,setShowDuel]=useState(false);const[showMiniGames,setShowMiniGames]=useState(false);
@@ -10596,7 +10632,7 @@ function SpiritAnimals(){
   const availableSuggestions=CUSTOM_EXAMPLES.filter(s=>!usedHabitNames.has(s.name));
 
   const S={
-    app:{height:"100vh",maxHeight:"100dvh",background:"linear-gradient(180deg,#0a0a1a 0%,#121228 40%,#1a1040 100%)",color:"#e8e0f0",fontFamily:"'Nunito','Segoe UI',sans-serif",maxWidth:430,margin:"0 auto",position:"relative",overflow:"hidden",display:"flex",flexDirection:"column"},
+    app:{height:"100vh",maxHeight:"100dvh",background:"linear-gradient(180deg,#0a0a1a 0%,#121228 40%,#1a1040 100%)",color:"#e8e0f0",fontFamily:"'Nunito','Segoe UI',sans-serif",maxWidth:isWide?960:430,margin:"0 auto",position:"relative",overflow:"hidden",display:"flex",flexDirection:"column"},
     btn:{background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",borderRadius:14,padding:"11px 20px",fontSize:16,fontWeight:700,cursor:"pointer",minHeight:42},
     btnS:{background:"rgba(255,255,255,.08)",color:"#ccc",border:"1px solid rgba(255,255,255,.1)",borderRadius:10,padding:"8px 14px",fontSize:15,fontWeight:600,cursor:"pointer",minHeight:38},
     ad:{height:60,minHeight:60,background:"rgba(10,10,26,.95)",borderTop:"1px solid rgba(255,255,255,.05)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:"rgba(255,255,255,.2)"},
@@ -10609,7 +10645,7 @@ function SpiritAnimals(){
 
   // ─── WELCOME ──────────────────────────────────────────────────────
   if(screen==="welcome")return(
-    <div style={S.app}><style>{CSS}</style>
+    <div className="zb-app" style={S.app}><style>{CSS}</style>
       <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"0 24px",textAlign:"center"}}>
         <div style={{fontSize:64,marginBottom:12,animation:"float 3s ease-in-out infinite"}}>🐾</div>
         <h1 style={{fontSize:32,fontWeight:900,background:"linear-gradient(135deg,#f093fb,#f5576c,#feca57)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:8}}>Zobuddy</h1>
@@ -10665,7 +10701,7 @@ function SpiritAnimals(){
   const canProceed=tempAnimal&&(!isCustomSelected||customEmoji);
 
   if(screen==="pick_animal")return(
-    <div style={S.app}><style>{CSS}</style>
+    <div className="zb-app" style={S.app}><style>{CSS}</style>
       <div style={{flex:1,overflow:"auto",padding:"16px 16px 0"}}>
         <div style={{textAlign:"center",marginBottom:8}}><div style={{fontSize:18,fontWeight:900,background:"linear-gradient(135deg,#f093fb,#f5576c,#feca57)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Choose Your Zobuddy</div></div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8}}>
@@ -10700,7 +10736,7 @@ function SpiritAnimals(){
   if(screen==="pick_habits"){
     const all=[...PRESET_HABITS,...customHabits];
     return(
-      <div style={S.app}><style>{CSS}</style>
+      <div className="zb-app" style={S.app}><style>{CSS}</style>
         <div style={{flex:1,overflow:"auto",padding:"16px 16px 0"}}>
           <div style={{textAlign:"center",marginBottom:10}}><div style={{fontSize:18,fontWeight:900,background:"linear-gradient(135deg,#f093fb,#f5576c,#feca57)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>{editingGoals?"Edit Goals":"Set Your Goals"}</div><p style={{fontSize:15,opacity:.4,marginTop:2}}>{editingGoals?"Toggle, add, or remove goals":"Even 1 goal is powerful!"}</p></div>
           {all.map(h=>{
@@ -10815,27 +10851,27 @@ function SpiritAnimals(){
   // ─── TAB BAR ────────────────────────────────────────────────────
   const tabBorderColor="rgba(102,126,234,.3)";
   const TabBar=(
-    <div style={{flexShrink:0,margin:"0 4px"}}>
-      <div style={{display:"flex",alignItems:"stretch",background:"#07071a",borderRadius:"14px 14px 0 0",border:`1px solid ${tabBorderColor}`,borderBottom:"none",overflow:"hidden"}}>
+    <div style={{flexShrink:0,margin:isWide?"0 8px":"0 4px"}}>
+      <div className="zb-tab-bar" style={{display:"flex",alignItems:"stretch",background:"#07071a",borderRadius:"14px 14px 0 0",border:`1px solid ${tabBorderColor}`,borderBottom:"none",overflow:"hidden"}}>
         {[{id:"buddy",icon:"🐾",label:"Buddy"},{id:"planner",icon:"📅",label:"Planner"},{id:"budget",icon:"💰",label:"Budget"},{id:"learn",icon:"🎓",label:"Learn"},{id:"notebook",icon:"📓",label:"Notepad"}].map((tab,i)=>{
           const active=activeTab===tab.id;
           return(
             <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
-              style={{flex:1,padding:"10px 0 8px",
+              style={{flex:1,padding:isWide?"12px 0 10px":"10px 0 8px",
                 background:active?"linear-gradient(180deg,#1a1a3a,#0e0e24)":"transparent",
                 border:"none",
                 cursor:"pointer",
-                display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                display:"flex",flexDirection:"column",alignItems:"center",gap:isWide?3:2,
                 transition:"background .15s"}}>
-              <span style={{fontSize:16,filter:active?"none":"grayscale(1) opacity(.35)"}}>{tab.icon}</span>
-              <span style={{fontSize:11,fontWeight:800,color:active?"#a8b4f0":"rgba(255,255,255,.2)",letterSpacing:.5}}>{tab.label}</span>
+              <span style={{fontSize:isWide?18:16,filter:active?"none":"grayscale(1) opacity(.35)"}}>{tab.icon}</span>
+              <span className="zb-tab-label" style={{fontSize:isWide?12:11,fontWeight:800,color:active?"#a8b4f0":"rgba(255,255,255,.2)",letterSpacing:.5}}>{tab.label}</span>
             </button>
           );
         })}
         <button onClick={()=>setShowSettings(true)} 
-          style={{padding:"10px 14px 8px",background:"transparent",border:"none",
+          style={{padding:isWide?"12px 18px 10px":"10px 14px 8px",background:"transparent",border:"none",
             borderLeft:`1px solid ${tabBorderColor}`,
-            cursor:"pointer",fontSize:15,opacity:.35}}>⚙️</button>
+            cursor:"pointer",fontSize:isWide?17:15,opacity:.35}}>⚙️</button>
       </div>
     </div>
   );
@@ -10877,7 +10913,7 @@ function SpiritAnimals(){
 
   const SettingsPanel=showSettings?(
     <div style={{position:"fixed",inset:0,zIndex:300,background:"rgba(0,0,0,.92)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>{setShowSettings(false);setSearchQuery("");setSearchResults([]);}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(135deg,#1a1040,#121228)",borderRadius:20,padding:20,maxWidth:340,width:"100%",border:`1px solid rgba(255,255,255,.06)`,maxHeight:"80vh",overflowY:"auto"}}>
+      <div onClick={e=>e.stopPropagation()} className="zb-settings-panel" style={{background:"linear-gradient(135deg,#1a1040,#121228)",borderRadius:20,padding:20,maxWidth:isWide?520:340,width:"100%",border:`1px solid rgba(255,255,255,.06)`,maxHeight:"80vh",overflowY:"auto"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
           <div style={{fontSize:18,fontWeight:900,color:"#e8e0f0"}}>⚙️ Settings</div>
           <button onClick={()=>{setShowSettings(false);setSearchQuery("");setSearchResults([]);}} style={{background:"rgba(255,255,255,.03)",border:`1px solid rgba(255,255,255,.06)`,borderRadius:8,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#e8e0f0",fontSize:16}}>✕</button>
@@ -10968,12 +11004,12 @@ function SpiritAnimals(){
     </div>
   ):null;
 
-  const tabContentStyle={borderLeft:`1px solid ${tabBorderColor}`,borderRight:`1px solid ${tabBorderColor}`,borderBottom:`1px solid ${tabBorderColor}`,borderTop:"none",borderRadius:"0 0 14px 14px",flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0,margin:"0 4px"};
+  const tabContentStyle={borderLeft:`1px solid ${tabBorderColor}`,borderRight:`1px solid ${tabBorderColor}`,borderBottom:`1px solid ${tabBorderColor}`,borderTop:"none",borderRadius:"0 0 14px 14px",flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0,margin:isWide?"0 8px":"0 4px"};
   const AdSpace=<div style={{height:60,minHeight:60,flexShrink:0}}/>;
 
   // ─── NOTEBOOK TAB ──────────────────────────────────────────────
   if(activeTab==="notebook")return(
-    <div style={{...S.app}}>
+    <div className="zb-app" style={{...S.app}}>
       <style>{CSS}</style>
       {TabBar}
       {SettingsPanel}
@@ -10986,7 +11022,7 @@ function SpiritAnimals(){
 
   // ─── LEARN TAB ──────────────────────────────────────────────────
   if(activeTab==="learn")return(
-    <div style={{...S.app}}>
+    <div className="zb-app" style={{...S.app}}>
       <style>{CSS}</style>
       {TabBar}
       {SettingsPanel}
@@ -10999,7 +11035,7 @@ function SpiritAnimals(){
 
   // ─── BUDGET TAB ─────────────────────────────────────────────────
   if(activeTab==="budget")return(
-    <div style={{...S.app}}>
+    <div className="zb-app" style={{...S.app}}>
       <style>{CSS}</style>
       {TabBar}
       {SettingsPanel}
@@ -11012,7 +11048,7 @@ function SpiritAnimals(){
 
   // ─── PLANNER TAB ──────────────────────────────────────────────────
   if(activeTab==="planner")return(
-    <div style={{...S.app}}>
+    <div className="zb-app" style={{...S.app}}>
       <style>{CSS}</style>
       {TabBar}
       {SettingsPanel}
@@ -11033,7 +11069,7 @@ function SpiritAnimals(){
   );
 
   return(
-    <div style={{...S.app}}><style>{CSS}</style>
+    <div className="zb-app" style={{...S.app}}><style>{CSS}</style>
       {TabBar}
       {SettingsPanel}
       <div style={{...tabContentStyle,overflowY:"auto"}}>
@@ -11050,8 +11086,11 @@ function SpiritAnimals(){
       
 
       {/* Header */}
-      <div style={{padding:"6px 16px 0"}}>
+      <div style={{padding:isWide?"10px 20px 0":"6px 16px 0"}}>
+      {/* Responsive grid: side-by-side on wide, stacked on mobile */}
+      <div style={isWide?{display:"grid",gridTemplateColumns:screen_.isDesktop?"340px 1fr":"1fr 1fr",gap:screen_.isDesktop?16:10,alignItems:"start"}:{}}>
         {/* ── Buddy Card (styled like stats card) ── */}
+        <div className="zb-buddy-col">
         <div style={{borderRadius:16,padding:2,background:allDoneToday?`linear-gradient(135deg,${animalData.color},${animalData.accent},#feca57,${animalData.color})`:"rgba(255,255,255,.08)",backgroundSize:"300% 300%",animation:allDoneToday?"holoShift 4s ease infinite":"none",boxShadow:allDoneToday?(streak>=30?"0 0 30px rgba(103,232,249,.6)":streak>=21?"0 0 25px rgba(251,191,36,.5)":streak>=14?"0 0 20px rgba(192,132,252,.4)":streak>=7?"0 0 15px rgba(96,165,250,.3)":"0 8px 32px rgba(0,0,0,.5)"):"0 8px 32px rgba(0,0,0,.5)"}}>
           <div style={{borderRadius:14,background:"linear-gradient(160deg,#0d0d2b 0%,#1a1040 30%,#0f1a3a 60%,#0d0d2b 100%)",padding:"8px 12px",position:"relative",overflow:"hidden"}}>
             {allDoneToday&&<div style={{position:"absolute",inset:0,borderRadius:14,background:"linear-gradient(105deg,transparent 30%,rgba(255,255,255,.03) 45%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.03) 55%,transparent 70%)",backgroundSize:"200% 200%",animation:"holoShimmer 3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>}
@@ -11107,11 +11146,11 @@ function SpiritAnimals(){
             </div>
           </div>
         </div>
-      </div>
+        </div>{/* end zb-buddy-col */}
 
-      {/* Goals */}
-      <div style={{padding:"6px 16px 0"}}>
-        <div style={{background:"rgba(255,255,255,.03)",borderRadius:12,border:"1px solid rgba(255,255,255,.06)",padding:"6px 10px"}}>
+      {/* Goals column */}
+      <div className="zb-goals-col">
+      <div style={{background:"rgba(255,255,255,.03)",borderRadius:12,border:"1px solid rgba(255,255,255,.06)",padding:"6px 10px",marginTop:isWide?0:6}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
             <span style={{fontSize:12,fontWeight:700,opacity:.3,letterSpacing:1}}>GOALS</span>
             {canEditHabits?<button onClick={()=>openEditGoals()} style={{background:"rgba(102,126,234,.12)",border:"1px solid rgba(102,126,234,.25)",borderRadius:6,padding:"2px 8px",fontSize:12,color:"#a8b4f0",cursor:"pointer",fontWeight:700}}>✏️ Edit</button>
@@ -11122,13 +11161,12 @@ function SpiritAnimals(){
             <button onClick={()=>setShowMore(!showMore)} style={{...S.btnS,width:"100%",marginTop:4,textAlign:"center",fontSize:13,padding:"5px 0"}}>
               {showMore?"▲ Hide":`▼ +${overflowHabits.length} more (${overflowHabits.filter(h=>doneToday.includes(h)).length}/${overflowHabits.length} done)`}
             </button>
-            {showMore&&<div style={{maxHeight:120,overflowY:"auto",display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,marginTop:4,padding:2}}>{overflowHabits.map(hId=><HabitChip key={hId} hId={hId}/>)}</div>}
+            {showMore&&<div style={{maxHeight:isWide?200:120,overflowY:"auto",display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,marginTop:4,padding:2}}>{overflowHabits.map(hId=><HabitChip key={hId} hId={hId}/>)}</div>}
           </>}
         </div>
-      </div>
 
-      {/* Daily Quest */}
-      {dailyQuestInfo&&<div style={{margin:"4px 16px 0",padding:"6px 12px",borderRadius:10,background:"linear-gradient(135deg,rgba(254,202,87,.06),rgba(255,165,0,.03))",border:"1px solid rgba(254,202,87,.12)"}}>
+      {/* Daily Quest — inside goals column on wide */}
+      {dailyQuestInfo&&<div style={{margin:"6px 0 0",padding:"6px 12px",borderRadius:10,background:"linear-gradient(135deg,rgba(254,202,87,.06),rgba(255,165,0,.03))",border:"1px solid rgba(254,202,87,.12)"}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:15}}>{dailyQuestInfo.icon}</span>
           <div style={{flex:1}}>
@@ -11141,17 +11179,20 @@ function SpiritAnimals(){
         </div>
       </div>}
 
-      {/* Action buttons */}
-      <div style={{display:"flex",gap:6,padding:"6px 16px 10px"}}>
+      {/* Action buttons — inside goals column on wide */}
+      <div style={{display:"flex",gap:6,padding:"6px 0 0"}}>
         <button onClick={()=>setShowShare(true)} style={{...S.btn,flex:1,fontSize:15,padding:"9px 0",background:"linear-gradient(135deg,#43e97b,#38f9d7)",color:"#1a1a2e"}}>📊 Stats</button>
         <button onClick={()=>setShowDuel(true)} style={{...S.btn,flex:1,fontSize:15,padding:"9px 0",background:"linear-gradient(135deg,#f093fb,#f5576c)"}}>⚔️ Battle</button>
         <button onClick={()=>setShowMiniGames(true)} style={{...S.btn,flex:1,fontSize:15,padding:"9px 0",background:"linear-gradient(135deg,#feca57,#fb923c)",color:"#1a1a2e"}}>🎮 Games</button>
       </div>
+      </div>{/* end zb-goals-col */}
+      </div>{/* end responsive grid */}
+      </div>{/* end header padding */}
 
 
       {/* Reset confirmation */}
       {showResetConfirm&&<div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowResetConfirm(false)}>
-        <div onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(135deg,#1a1040,#2a0a1e)",borderRadius:20,padding:24,maxWidth:320,width:"100%",textAlign:"center",border:"1px solid rgba(245,87,108,.2)"}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(135deg,#1a1040,#2a0a1e)",borderRadius:20,padding:24,maxWidth:isWide?440:320,width:"100%",textAlign:"center",border:"1px solid rgba(245,87,108,.2)"}}>
           <div style={{fontSize:36,marginBottom:8}}>⚠️</div>
           <div style={{fontSize:16,fontWeight:900,color:"#f5576c",marginBottom:8}}>Restart?</div>
           <p style={{fontSize:16,opacity:.6,lineHeight:1.5,marginBottom:16}}>Pick how you want to restart:</p>
