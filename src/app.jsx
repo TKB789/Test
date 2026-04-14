@@ -7194,7 +7194,7 @@ const NotebookPanel=()=>{
         vecSvgRef.current=result.svg;
         const d=readNb();const pi=pageIdxRef.current;
         if(d.pages?.[pi]){d.pages[pi].vectorPng=result.pngUrl||"";d.pages[pi].vectorColors=result.colors;d.pages[pi].vecDrawData=null;d.pages[pi].vectorOriginal=canvasToJpeg(cc,0.6);d.pages[pi].vectorRegions=result.regionData||null;delete d.pages[pi].vectorSvg;
-          try{writeNb(d);setNbData({...d});}catch(err){alert("Save failed — try fewer colors.");}}
+          try{writeNb(d);setNbData(JSON.parse(JSON.stringify(d)));}catch(err){alert("Save failed — try fewer colors.");}}
       });
     };ci2.src=src;
   };
@@ -7380,7 +7380,7 @@ const NotebookPanel=()=>{
         setPolyImporting(false);if(!result)return;
         const d=readNb();const pi=pageIdxRef.current;
         if(d.pages?.[pi]){d.pages[pi].polyPng=result.pngUrl;d.pages[pi].polyColors=result.colors;d.pages[pi].polyOriginal=canvasToJpeg(cc,0.6);d.pages[pi].polyTriGeo=result.triGeo||null;d.pages[pi].polyW=result.width;d.pages[pi].polyH=result.height;
-          try{writeNb(d);setNbData({...d});}catch(err){alert("Save failed — try fewer colors.");}}
+          try{writeNb(d);setNbData(JSON.parse(JSON.stringify(d)));}catch(err){alert("Save failed — try fewer colors.");}}
       });
     };ci2.src=src;
   };
@@ -7962,6 +7962,16 @@ const NotebookPanel=()=>{
       {/* Full DMC palette (all art types) */}
       {showPixPicker&&<div style={{padding:"4px 10px 4px",flexShrink:0}}>
         <input value={pixPaletteSearch} onChange={e=>setPixPaletteSearch(e.target.value)} placeholder="Search DMC # or color name..." style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid rgba(255,255,255,.12)",background:"rgba(255,255,255,.06)",color:"#e8e0f0",fontSize:11,outline:"none",marginBottom:4,boxSizing:"border-box"}}/>
+        {/* Pinned primary colors */}
+        {!pixPaletteSearch.trim()&&<div style={{display:"flex",gap:3,marginBottom:4,flexWrap:"wrap"}}>
+          {["321","797","973","699","740","550","310","414","Blanc","498","996","725"].map(n=>{const p=PIXEL_PALETTE.find(x=>x.n===n);if(!p)return null;
+            const selColor=artStyle==="pixel"?pixelColor:vecDrawColor;const isSel=p.c===selColor;
+            const lum=parseInt(p.c.slice(1,3),16)*.299+parseInt(p.c.slice(3,5),16)*.587+parseInt(p.c.slice(5,7),16)*.114;
+            return(<div key={"pin"+n} onClick={()=>{if(artStyle==="pixel"){setPixelColor(p.c);setPixelEraser(false);setPixEyedropper(false);}else{setVecDrawColor(p.c);setVecDrawEraser(false);setVecEyedropper(false);}}}
+              style={{width:28,height:28,borderRadius:4,background:p.c,border:isSel?"2px solid #feca57":lum<80?"1px solid rgba(255,255,255,.35)":"1px solid rgba(0,0,0,.15)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontSize:7,fontWeight:800,color:lum>128?"rgba(0,0,0,.6)":"rgba(255,255,255,.7)"}}>{n}</span>
+            </div>);})}
+        </div>}
         <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gap:2,maxHeight:90,overflowY:"auto",overflowX:"hidden"}}>
           {(pixPaletteSearch.trim()?PIXEL_PALETTE.filter(p=>{const q=pixPaletteSearch.toLowerCase();return p.n.toLowerCase().includes(q)||p.nm.toLowerCase().includes(q);}):PIXEL_PALETTE).map(p=>{const selColor=artStyle==="pixel"?pixelColor:vecDrawColor;const isSel=p.c===selColor;return(<div key={p.n+p.c} onClick={()=>{if(artStyle==="pixel"){setPixelColor(p.c);setPixelEraser(false);setPixEyedropper(false);}else{setVecDrawColor(p.c);setVecDrawEraser(false);setVecEyedropper(false);}}} title={`DMC ${p.n} — ${p.nm}`}
             style={{position:"relative",aspectRatio:"1",borderRadius:3,background:p.c,border:isSel?"2px solid #feca57":(parseInt(p.c.slice(1,3),16)*.299+parseInt(p.c.slice(3,5),16)*.587+parseInt(p.c.slice(5,7),16)*.114)<80?"1px solid rgba(255,255,255,.35)":"1px solid rgba(0,0,0,.15)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",minWidth:0}}>
