@@ -8902,7 +8902,8 @@ function DayPlanner({plannerData,plannerViewDate,setPlannerViewDate,MOODS,getPla
   const[cleanNewWeeklyTask,setCleanNewWeeklyTask]=useState("");
 
   const activeDailyTasks=cleanCustomTasks.daily||defaultCleanTasks.daily;
-  const activeWeeklyRooms=cleanCustomTasks.weekly||defaultCleanTasks.weekly;
+  const DAY_ORDER_MAP={"Sun":0,"Mon":1,"Tue":2,"Wed":3,"Thu":4,"Fri":5,"Sat":6};
+  const activeWeeklyRooms=[...(cleanCustomTasks.weekly||defaultCleanTasks.weekly)].sort((a,b)=>(DAY_ORDER_MAP[a.day]??7)-(DAY_ORDER_MAP[b.day]??7));
   const activeMonthlyTasks=cleanCustomTasks.monthly||defaultCleanTasks.monthly;
 
   const MONTH_NAMES=["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -10107,7 +10108,8 @@ function WorkoutTab({workoutData,setWorkoutData,checkBox,MONTH_NAMES}){
   const[woEditMode,setWoEditMode]=useState(null);
   const[woEditingItem,setWoEditingItem]=useState(null);
   const activeWoDaily=woCustomTasks.daily||defaultWoTasks.daily;
-  const activeWoWeekly=woCustomTasks.weekly||defaultWoTasks.weekly;
+  const WO_DAY_ORDER={"Sun":0,"Mon":1,"Tue":2,"Wed":3,"Thu":4,"Fri":5,"Sat":6};
+  const activeWoWeekly=[...(woCustomTasks.weekly||defaultWoTasks.weekly)].sort((a,b)=>(WO_DAY_ORDER[a.day]??7)-(WO_DAY_ORDER[b.day]??7));
   const activeWoMonthly=woCustomTasks.monthly||defaultWoTasks.monthly;
 
   const toggleWoDaily=(weekKey,taskId,day)=>{setWorkoutData(p=>{const mo={...getWoMonth(),...p[woMonthKey]};const wk={...(mo.daily[weekKey]||{})};if(day){const td=typeof wk[taskId]==="object"&&wk[taskId]!==null&&wk[taskId]!==true?{...wk[taskId]}:{};td[day]=!td[day];wk[taskId]=td;}else{wk[taskId]=!wk[taskId];}return{...p,[woMonthKey]:{...mo,daily:{...mo.daily,[weekKey]:wk}}};});};
