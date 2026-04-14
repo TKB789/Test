@@ -173,9 +173,9 @@ const NEGATIVE_EFFECTS = [
   // --- Transform effects (change buddy appearance) ---
   { id:"shrink",name:"Shrinks down",icon:"🔍",visual:"shrink",cat:"transform" },
   { id:"ghost",name:"Goes transparent",icon:"👻",visual:"ghost",cat:"transform" },
-  { id:"frozen",name:"Freezes solid",icon:"🧊",visual:"frozen",cat:"transform" },
+  { id:"frozen",name:"Freezes solid",icon:"❄️",visual:"frozen",cat:"transform" },
   { id:"upside",name:"Flips upside down",icon:"🙃",visual:"upside",cat:"transform" },
-  { id:"melts",name:"Melts down",icon:"🫠",visual:"melts",cat:"transform" },
+  { id:"melts",name:"Melts down",icon:"😵",visual:"melts",cat:"transform" },
   // --- Movement effects (buddy animates — only 1 active at a time) ---
   { id:"shiver",name:"Shivers",icon:"🥶",visual:"shiver",cat:"movement" },
   { id:"glitch",name:"Glitches out",icon:"📺",visual:"glitch",cat:"movement" },
@@ -210,7 +210,7 @@ const ICON_HINTS={
   run:"🏃",jog:"🏃",sprint:"🏃",
   exercise:"💪",workout:"💪",gym:"🏋️",lift:"🏋️",train:"💪",
   junk:"🥗",sugar:"🍬",candy:"🍬",snack:"🍿",fast:"🍔",
-  fruit:"🍎",apple:"🍎",banana:"🍌",berry:"🫐",
+  fruit:"🍎",apple:"🍎",banana:"🍌",berry:"🍇",
   veggie:"🥦",vegetable:"🥦",salad:"🥗",
   water:"💧",hydrat:"💧",drink:"💧",
   stretch:"🤸",yoga:"🧘‍♀️",flex:"🤸",
@@ -976,7 +976,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     const[gameOver,setGameOver]=useState(false);
     const[best,setBest]=useState(()=>{try{return Number(ZobuddyDB.get("zo_best_bubbles"))||0;}catch{return 0;}});
     const[flash,setFlash]=useState(null); // {idx,ok} for tap feedback
-    const GOOD=["🥦","🥕","🌽","🥬","🫑","🥒","🧅","🥑","🍆","🍅"];
+    const GOOD=["🥦","🥕","🌽","🥗","🌶️","🥒","🥔","🥑","🍆","🍅"];
     const TRAPS=["🍄","☠️"];
     const spawnMs=Math.max(350,900-score*8);
     const showMs=Math.max(400,900-score*7);
@@ -1065,7 +1065,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
     const[elapsed,setElapsed]=useState(0);
     const startRef=React.useRef(Date.now());
     const W=320,H=420,BD=4;
-    const FRUITS=["🍎","🍊","🍋","🍇","🫐","🥝","🍓","🍑","🍌","🍐","🍒","🥭","🍉","🍈","🍍"];
+    const FRUITS=["🍎","🍊","🍋","🍇","🍏","🥝","🍓","🍑","🍌","🍐","🍒","🥭","🍉","🍈","🍍"];
     useEffect(()=>{
       const canvas=canvasRef.current;if(!canvas)return;const ctx=canvas.getContext("2d");
       if(!ctx)return;
@@ -1090,7 +1090,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
       for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){let ice=false;
         if(r===2&&c!==iceOpening)ice=true;else if(r>=3&&extraIce.has((r-3)*cols+c))ice=true;
         blocks.push({x:BD+gap+(cellW+gap)*c,y:topMargin+r*(cellH+gap),w:cellW,h:cellH,alive:true,unbreakable:ice,
-          emoji:ice?"🧊":FRUITS[Math.floor(Math.random()*FRUITS.length)]});}
+          emoji:ice?"❄️":FRUITS[Math.floor(Math.random()*FRUITS.length)]});}
       const pw=60+bonus*8;
       const paddleY=H-36;
       // Prize system
@@ -1439,7 +1439,7 @@ const MiniGames=({onClose,goalsToday,totalGoals})=>{
         </div>
         {/* Game end overlay - positioned over the grid */}
         {(gameOver||won)&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.7)",borderRadius:8}}>
-          <div style={{fontSize:28,fontWeight:900,color:won?"#43e97b":"#f5576c",textShadow:"0 2px 8px rgba(0,0,0,.5)"}}>{won?"🌈🍀 Luck Is On Your Side! 🪙🌈":"💩 Oh Poo-Hoo! Mud all over you!"}</div>
+          <div style={{fontSize:28,fontWeight:900,color:won?"#43e97b":"#f5576c",textShadow:"0 2px 8px rgba(0,0,0,.5)"}}>{won?"🌈🍀 Luck Is On Your Side! 🏅🌈":"💩 Oh Poo-Hoo! Mud all over you!"}</div>
           {won&&<div style={{fontSize:16,color:"#feca57",fontWeight:800,marginTop:4}}>Time: {elapsed}s</div>}
           {won&&best>0&&elapsed<=best&&<div style={{fontSize:13,color:"#43e97b",fontWeight:700}}>🏆 Best!</div>}
           {won&&best>0&&elapsed>best&&<div style={{fontSize:12,opacity:.5}}>Best: {best}s</div>}
@@ -2860,7 +2860,7 @@ const FIN_TIPS=[
   {tip:"The cheapest car you can afford isn't always the best value. Factor in maintenance.",icon:"🔧"},
   {tip:"Teach kids about money early. Allowance + saving jars = lifelong financial habits.",icon:"👧"},
   {tip:"Think of taxes as the price of earning money. Optimize, don't evade.",icon:"📑"},
-  {tip:"A penny saved is more than a penny earned — you don't pay tax on savings.",icon:"🪙"},
+  {tip:"A penny saved is more than a penny earned — you don't pay tax on savings.",icon:"💰"},
   {tip:"Don't lend money you can't afford to lose. It often ruins relationships.",icon:"🤝"},
   {tip:"The best investment you can make is in your own health and knowledge.",icon:"📚"},
   {tip:"Money is a tool, not a goal. Define what 'enough' means for you.",icon:"🎯"},
@@ -3056,7 +3056,7 @@ const FIN_TIPS=[
   {tip:"Use your local library for audiobooks and ebooks. Most have free apps.",icon:"📖"},
   {tip:"Set a monthly charitable giving budget. Generosity is part of a healthy financial plan.",icon:"💝"},
   {tip:"Keep a running wishlist. Review it monthly. Most items won't seem as essential later.",icon:"📋"},
-  {tip:"Freeze leftover meals in portions. Free lunches for busy days.",icon:"🧊"},
+  {tip:"Freeze leftover meals in portions. Free lunches for busy days.",icon:"❄️"},
   {tip:"Carpool when possible. Split gas, reduce wear on your car, help the environment.",icon:"🚗"},
   {tip:"Use a programmable thermostat. Saving 1 degree can cut heating bills by 3%.",icon:"🌡️"},
   {tip:"Buy in bulk for non-perishables you use regularly. Toilet paper, cleaning supplies, rice.",icon:"🛒"},
@@ -3075,11 +3075,11 @@ const FIN_TIPS=[
   {tip:"Use natural light when possible. Open curtains instead of turning on lights.",icon:"☀️"},
   {tip:"Make your own cleaning supplies. Vinegar, baking soda, and water clean almost everything.",icon:"🧹"},
   {tip:"Bike or walk for short trips. Saves gas and improves your health.",icon:"🚲"},
-  {tip:"Use a reusable water bottle. Saves money and the planet.",icon:"🫗"},
+  {tip:"Use a reusable water bottle. Saves money and the planet.",icon:"💧"},
   {tip:"Host potlucks instead of dining out with friends. More fun, less expensive.",icon:"🍽️"},
   {tip:"Buy a whole chicken instead of parts. You get more meat for less money.",icon:"🍗"},
   {tip:"Adjust your tax withholding to get a smaller refund but bigger paychecks.",icon:"📋"},
-  {tip:"Invest spare change with micro-investing apps. Small amounts add up over time.",icon:"🪙"},
+  {tip:"Invest spare change with micro-investing apps. Small amounts add up over time.",icon:"💰"},
   {tip:"Cancel magazine and newspaper subscriptions you don't read.",icon:"📰"},
   {tip:"Use cold water for laundry. Saves energy and is gentler on clothes.",icon:"🧺"},
   {tip:"Make gifts instead of buying them. Photo albums, playlists, handmade items.",icon:"🎁"},
@@ -3139,7 +3139,7 @@ const MINDFULNESS=[
   {practice:"Write a thank-you letter you never send. The feeling is what matters.",icon:"✉️",type:"Gratitude"},
   {practice:"List 5 body parts you're grateful for and why.",icon:"🫀",type:"Gratitude"},
   {practice:"Name 3 strangers who made your day better without knowing it.",icon:"😊",type:"Gratitude"},
-  {practice:"Gratitude jar: Write something you're thankful for on a slip. Read them on hard days.",icon:"🫙",type:"Gratitude"},
+  {practice:"Gratitude jar: Write something you're thankful for on a slip. Read them on hard days.",icon:"🏺",type:"Gratitude"},
   {practice:"Think of a difficult person. Find one thing to be grateful for about them.",icon:"🤔",type:"Gratitude"},
   {practice:"List 3 small luxuries you take for granted: clean water, a warm bed, etc.",icon:"💧",type:"Gratitude"},
   {practice:"Look around your room. Find 5 things you're grateful for having.",icon:"👁️",type:"Gratitude"},
@@ -3156,11 +3156,11 @@ const MINDFULNESS=[
   {practice:"Touch 3 different textures around you. Notice the difference in each.",icon:"✋",type:"Grounding"},
   {practice:"Close your eyes. Name every sound you can identify. Just listen.",icon:"🔊",type:"Awareness"},
   {practice:"Feel the ground beneath your feet. Press down. Notice the stability.",icon:"🦶",type:"Grounding"},
-  {practice:"Hold an ice cube. Notice the cold, the melting, the sensation changing.",icon:"🧊",type:"Grounding"},
+  {practice:"Hold an ice cube. Notice the cold, the melting, the sensation changing.",icon:"❄️",type:"Grounding"},
   {practice:"Look at the sky for 60 seconds. Just look. Nothing else.",icon:"🌤️",type:"Presence"},
   {practice:"Smell something familiar — coffee, a candle, a flower. Breathe it in deeply.",icon:"👃",type:"Awareness"},
   {practice:"Set a 2-minute timer. Focus only on your breath. When your mind wanders, gently return.",icon:"⏱️",type:"Meditation"},
-  {practice:"Sit quietly for 1 minute doing absolutely nothing. Not even thinking on purpose.",icon:"🪷",type:"Stillness"},
+  {practice:"Sit quietly for 1 minute doing absolutely nothing. Not even thinking on purpose.",icon:"🌸",type:"Stillness"},
   {practice:"Count backwards from 50, focusing only on the numbers. Reset if distracted.",icon:"🔢",type:"Focus"},
   {practice:"Choose one task today and give it your complete, undivided attention.",icon:"🔍",type:"Focus"},
   {practice:"Spend 10 minutes in silence. No phone, no music, no TV. Just you.",icon:"🤫",type:"Stillness"},
@@ -3202,7 +3202,7 @@ const MINDFULNESS=[
   {practice:"Eat your next meal slowly. Notice every texture and flavor.",icon:"🍽️",type:"Mindful Eating"},
   {practice:"Drink a full glass of water mindfully. Feel the temperature, the swallowing.",icon:"💧",type:"Mindful Moment"},
   {practice:"Put your phone down for 30 minutes. Notice how it feels.",icon:"📱",type:"Digital Detox"},
-  {practice:"Wash your hands slowly. Feel the water, the soap, the temperature.",icon:"🫧",type:"Mindful Moment"},
+  {practice:"Wash your hands slowly. Feel the water, the soap, the temperature.",icon:"🌊",type:"Mindful Moment"},
   {practice:"Take the scenic route today. Choose beauty over speed.",icon:"🛤️",type:"Mindful Walk"},
   {practice:"Take a slow walk and notice 3 beautiful things you'd normally miss.",icon:"🚶",type:"Mindful Walk"},
   {practice:"Mindful tea or coffee: Feel the warmth of the cup. Smell it before sipping.",icon:"☕",type:"Mindful Moment"},
@@ -3276,7 +3276,7 @@ const MINDFULNESS=[
   {practice:"Peripheral vision exercise: Soften your gaze and notice what's at the edges. Calms the nervous system.",icon:"👀",type:"Awareness"},
   {practice:"Compassion meditation: 'May all beings be happy. May all beings be free from suffering.'",icon:"🕊️",type:"Meditation"},
   {practice:"Joy practice: Remember the last time you laughed hard. Relive it in detail.",icon:"😂",type:"Joy"},
-  {practice:"Acceptance moment: Say 'This is how it is right now.' No resistance, no judgment.",icon:"🪷",type:"Acceptance"},
+  {practice:"Acceptance moment: Say 'This is how it is right now.' No resistance, no judgment.",icon:"🌸",type:"Acceptance"},
   {practice:"Future self visualization: See yourself in 5 years, happy and healthy. What did you do to get there?",icon:"🔮",type:"Visualization"},
   {practice:"Breath as anchor: Every time you notice stress, return to one conscious breath.",icon:"⚓",type:"Breathing"},
   {practice:"Mindful listening: In your next conversation, listen without planning your response.",icon:"👂",type:"Connection"},
@@ -3297,7 +3297,7 @@ const MINDFULNESS=[
   {practice:"Wonder practice: Look at something familiar with the eyes of a child seeing it for the first time.",icon:"👶",type:"Awareness"},
   {practice:"Mindful cleaning: Wash one dish with full attention. Feel the water, the soap, the clean.",icon:"🍽️",type:"Mindful Moment"},
   {practice:"Evening wind-down: 10 minutes before bed, dim lights and do nothing productive.",icon:"🌙",type:"Sleep"},
-  {practice:"Stillness challenge: How long can you sit perfectly still? No fidgeting. Just being.",icon:"🪨",type:"Stillness"},
+  {practice:"Stillness challenge: How long can you sit perfectly still? No fidgeting. Just being.",icon:"⛰️",type:"Stillness"},
   {practice:"One-breath reset: Whenever overwhelmed, stop. Take one enormous breath. Continue.",icon:"🌬️",type:"Breathing"},
 ];
 
@@ -11122,7 +11122,7 @@ function SpiritAnimals(){
           <div style={{fontSize:16,fontWeight:900,color:"#f5576c",marginBottom:8}}>Restart?</div>
           <p style={{fontSize:16,opacity:.6,lineHeight:1.5,marginBottom:16}}>Pick how you want to restart:</p>
           {duelStats.tokens>0&&<button onClick={transferAndReset} style={{width:"100%",background:"linear-gradient(135deg,rgba(254,202,87,.15),rgba(255,165,0,.1))",border:"1px solid rgba(254,202,87,.3)",borderRadius:12,padding:"12px 16px",marginBottom:8,cursor:"pointer",display:"flex",alignItems:"center",gap:10,textAlign:"left"}}>
-            <span style={{fontSize:24}}>🪙</span>
+            <span style={{fontSize:24}}>💰</span>
             <div>
               <div style={{fontSize:16,fontWeight:800,color:"#feca57"}}>Transfer Stats ({duelStats.tokens} token{duelStats.tokens>1?"s":""})</div>
               <div style={{fontSize:14,opacity:.5,color:"#e8e0f0"}}>New buddy keeps your streak, history & power</div>
