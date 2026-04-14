@@ -6998,7 +6998,7 @@ const NotebookPanel=()=>{
     const lineColor=light?"rgba(0,0,0,.08)":"rgba(255,255,255,.06)";
     const dotColor=light?"rgba(0,0,0,.12)":"rgba(255,255,255,.08)";
     return(
-    <div style={{position:"relative",background:bg,borderRadius:8,border:"1px solid "+(light?"rgba(0,0,0,.1)":"rgba(255,255,255,.06)"),minWidth:500,minHeight:800}}>
+    <div style={{position:"relative",background:bg,borderRadius:8,border:"1px solid "+(light?"rgba(0,0,0,.1)":"rgba(255,255,255,.06)"),width:"100%",minHeight:600}}>
       {type==="lined"&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
         {Array.from({length:50},(_,i)=><line key={i} x1="0" y1={28+i*28} x2="100%" y2={28+i*28} stroke={lineColor} strokeWidth="1"/>)}</svg>}
       {type==="square"&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
@@ -7012,7 +7012,7 @@ const NotebookPanel=()=>{
         <rect width="100%" height="100%" fill="url(#hx8)"/></svg>}
       {children}</div>);
   };
-  const ts=(type,bgColor)=>({width:"100%",minHeight:800,padding:type==="lined"?"6px 14px":type==="square"?"2px 14px":type==="hex"?"13px 14px":"14px",
+  const ts=(type,bgColor)=>({width:"100%",minHeight:600,padding:type==="lined"?"6px 14px":type==="square"?"2px 14px":type==="hex"?"13px 14px":"14px",
     background:"transparent",border:"none",color:isLightBg(bgColor)?"#1a1a2e":"#e8e0f0",fontSize:15,
     lineHeight:type==="lined"?"28px":type==="square"?"24px":type==="hex"?"35px":"1.6",
     outline:"none",resize:"none",fontFamily:"'Nunito',sans-serif"});
@@ -8199,7 +8199,7 @@ const NotebookPanel=()=>{
         <div style={{transform:`scale(${pageZoom})`,transformOrigin:"top left",width:`${100/pageZoom}%`}}>
           <PageBg type={page.type} bgColor={page.bgColor}>
             {!pageDrawMode&&<div style={{position:"relative"}}>
-              {existingDraw&&<img src={existingDraw} style={{position:"absolute",top:0,left:0,width:"100%",height:800,pointerEvents:"none",opacity:.7,zIndex:2}}/>}
+              {existingDraw&&<img src={existingDraw} style={{position:"absolute",top:0,left:0,width:"100%",height:"auto",maxHeight:600,pointerEvents:"none",opacity:.7,zIndex:2}}/>}
               <textarea ref={(el)=>{if(el){
                 const curIdx=String(pageIdxRef.current);
                 if(el.dataset.loadedIdx!==curIdx){
@@ -8209,15 +8209,24 @@ const NotebookPanel=()=>{
                 textareaRef.current=el;}}
               } onInput={onTextInput} onBlur={()=>saveText()} placeholder="Start writing..." style={{...ts(page.type,page.bgColor),position:"relative",zIndex:1}}/>
             </div>}
-            {pageDrawMode&&<div style={{position:"relative"}}>
-              {(()=>{const baseTs=ts(page.type,page.bgColor);return <div style={{position:"absolute",top:0,left:0,width:500,minHeight:800,
+            {pageDrawMode&&<div style={{position:"relative"}} ref={(el)=>{
+              // Resize canvas to match container width on mount
+              if(el&&canvasCallbackRef){
+                const cw=el.offsetWidth||360;
+                const existingCanvas=el.querySelector("canvas");
+                if(existingCanvas&&existingCanvas.width!==cw){
+                  // Don't resize if already set — handled by canvas ref callback
+                }
+              }
+            }}>
+              {(()=>{const baseTs=ts(page.type,page.bgColor);return <div style={{position:"absolute",top:0,left:0,width:"100%",minHeight:600,
                 padding:baseTs.padding,fontSize:`${baseTs.fontSize||15}px`,
                 lineHeight:baseTs.lineHeight,
                 fontFamily:baseTs.fontFamily||"'Nunito',sans-serif",
                 color:"rgba(232,224,240,.4)",whiteSpace:"pre-wrap",wordBreak:"break-word",pointerEvents:"none",zIndex:0,
                 boxSizing:"border-box"}}>{textRef.current}</div>;})()}
-              <canvas ref={canvasCallbackRef} width={500} height={800}
-                style={{width:500,height:800,touchAction:"pan-x pan-y pinch-zoom",background:"transparent",display:"block",position:"relative",zIndex:1}}/>
+              <canvas ref={canvasCallbackRef} width={360} height={600}
+                style={{width:"100%",height:600,touchAction:"pan-x pan-y pinch-zoom",background:"transparent",display:"block",position:"relative",zIndex:1}}/>
             </div>}
           </PageBg>
         </div></div></div>);
@@ -8276,7 +8285,7 @@ const NotebookPanel=()=>{
         </div>
         {isExpanded&&<div onClick={openPage} style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,.06)",cursor:"pointer"}}>
           {/* Preview — combined text + drawing overlay, matching actual note layout */}
-          {p.type!=="pixel"&&p.type!=="vector"&&(p.content||p.drawData)?<div style={{position:"relative",marginBottom:8,borderRadius:6,border:"1px solid rgba(255,255,255,.06)",background:"rgba(255,255,255,.02)",overflow:"hidden",aspectRatio:"500/300"}}>
+          {p.type!=="pixel"&&p.type!=="vector"&&(p.content||p.drawData)?<div style={{position:"relative",marginBottom:8,borderRadius:6,border:"1px solid rgba(255,255,255,.06)",background:"rgba(255,255,255,.02)",overflow:"hidden",aspectRatio:"5/3",maxHeight:200}}>
             {/* Text layer */}
             {p.content&&<div style={{position:"absolute",inset:0,fontSize:11,color:"rgba(232,224,240,.5)",lineHeight:1.5,padding:"8px 10px",whiteSpace:"pre-wrap",wordBreak:"break-word",overflow:"hidden"}}>{p.content.slice(0,400)}</div>}
             {/* Drawing layer on top */}
