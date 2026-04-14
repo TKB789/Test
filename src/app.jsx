@@ -7537,32 +7537,65 @@ const NotebookPanel=()=>{
             }
           });
         } else {
-          // ═══ FALLBACK: Old pixel-scanning approach for art without stored geometry ═══
-          const imgData2=tctx2.getImageData(0,0,pw,ph).data;
-          const colorMap=new Map();
-          vc.forEach((c,i)=>{colorMap.set(c.color.toLowerCase(),{idx:i+1,positions:[]});});
-          for(let y=0;y<ph;y+=printScale)for(let x=0;x<pw;x+=printScale){
-            const idx4=(y*pw+x)*4;const r2=imgData2[idx4],g2=imgData2[idx4+1],b2=imgData2[idx4+2];
-            const bi=nearestPalIdx(r2,g2,b2);
-            const col=palRgb[bi]?.color;
-            if(col&&colorMap.has(col))colorMap.get(col).positions.push({x,y});
+          // ═══ FALLBACK: Runtime connected-component region detection ═══
+          // Works for art created before geometry was stored
+          // Downscale for faster processing, then map centroids back up
+          const dsF=2; // downsample factor for speed
+          const dw=Math.ceil(pw/dsF),dh=Math.ceil(ph/dsF);
+          const dsCanvas=document.createElement("canvas");dsCanvas.width=dw;dsCanvas.height=dh;
+          const dsCtx=dsCanvas.getContext("2d");dsCtx.drawImage(artImg,0,0,dw,dh);
+          const dsData=dsCtx.getImageData(0,0,dw,dh).data;
+          // Quantize each pixel to nearest palette color
+          const qGrid=new Int16Array(dw*dh);
+          for(let y=0;y<dh;y++)for(let x=0;x<dw;x++){
+            const idx4=(y*dw+x)*4;
+            qGrid[y*dw+x]=nearestPalIdx(dsData[idx4],dsData[idx4+1],dsData[idx4+2]);
           }
+          // Connected-component flood fill to find regions
+          const visited=new Uint8Array(dw*dh);
+          const regions=[]; // [{palIdx, cx, cy, size}]
+          const minPx=Math.max(8,Math.round(dw*dh/3000));
+          for(let y=0;y<dh;y++)for(let x=0;x<dw;x++){
+            const idx=y*dw+x;
+            if(visited[idx])continue;
+            const ci=qGrid[idx];
+            const queue=[idx];visited[idx]=1;
+            let sx=0,sy=0,cnt=0;
+            while(queue.length>0){
+              const cur=queue.pop();const cy2=Math.floor(cur/dw),cx2=cur%dw;
+              sx+=cx2;sy+=cy2;cnt++;
+              if(cx2>0&&!visited[cur-1]&&qGrid[cur-1]===ci){visited[cur-1]=1;queue.push(cur-1);}
+              if(cx2<dw-1&&!visited[cur+1]&&qGrid[cur+1]===ci){visited[cur+1]=1;queue.push(cur+1);}
+              if(cy2>0&&!visited[cur-dw]&&qGrid[cur-dw]===ci){visited[cur-dw]=1;queue.push(cur-dw);}
+              if(cy2<dh-1&&!visited[cur+dw]&&qGrid[cur+dw]===ci){visited[cur+dw]=1;queue.push(cur+dw);}
+            }
+            if(cnt>=minPx){
+              regions.push({palIdx:ci,cx:Math.round(sx/cnt*dsF*printScale),cy:Math.round(sy/cnt*dsF*printScale),size:cnt});
+            }
+          }
+          // Draw numbers: group by palette color, place in all sufficiently large regions
           const fontSize2=Math.max(12,Math.round(Math.min(pw,ph)/35));
-          tctx2.font=`bold ${fontSize2}px sans-serif`;tctx2.textAlign="center";tctx2.textBaseline="middle";
-          colorMap.forEach((data,color)=>{
-            if(data.positions.length===0)return;
-            const gridSize=Math.max(30,Math.round(Math.min(pw,ph)/8));
-            const cells=new Map();
-            data.positions.forEach(p=>{const gk=Math.floor(p.x/gridSize)+","+Math.floor(p.y/gridSize);
-              if(!cells.has(gk))cells.set(gk,{sx:0,sy:0,count:0});const c2=cells.get(gk);c2.sx+=p.x;c2.sy+=p.y;c2.count++;});
-            let bestCell=null;cells.forEach(c2=>{if(!bestCell||c2.count>bestCell.count)bestCell=c2;});
-            if(!bestCell)return;
-            const cx=Math.round(bestCell.sx/bestCell.count),cy=Math.round(bestCell.sy/bestCell.count);
-            const lum=parseInt(color.slice(1,3),16)*.299+parseInt(color.slice(3,5),16)*.587+parseInt(color.slice(5,7),16)*.114;
-            tctx2.strokeStyle=lum>128?"rgba(0,0,0,.7)":"rgba(255,255,255,.7)";tctx2.lineWidth=Math.max(2,fontSize2/4);
-            tctx2.strokeText(String(data.idx),cx,cy);
-            tctx2.fillStyle=lum>128?"#000":"#fff";
-            tctx2.fillText(String(data.idx),cx,cy);
+          tctx2.textAlign="center";tctx2.textBaseline="middle";
+          const rByColor=new Map();
+          regions.forEach(r=>{if(!rByColor.has(r.palIdx))rByColor.set(r.palIdx,[]);rByColor.get(r.palIdx).push(r);});
+          rByColor.forEach((regs,palIdx)=>{
+            const palColor=palRgb[palIdx]?.color;
+            const num=palColor?colorToNum.get(palColor):null;
+            if(!num)return;
+            regs.sort((a,b)=>b.size-a.size);
+            const totalPx=regs.reduce((s,r)=>s+r.size,0);
+            const labelMin=Math.max(totalPx*0.008,minPx);
+            for(let i=0;i<regs.length;i++){
+              const r=regs[i];
+              if(r.size<labelMin&&i>0)break;
+              const lum=parseInt(palColor.slice(1,3),16)*.299+parseInt(palColor.slice(3,5),16)*.587+parseInt(palColor.slice(5,7),16)*.114;
+              const fs=Math.max(9,Math.min(fontSize2,Math.round(Math.sqrt(r.size*dsF*dsF)*0.5)));
+              tctx2.font=`bold ${fs}px sans-serif`;
+              tctx2.strokeStyle=lum>128?"rgba(0,0,0,.8)":"rgba(255,255,255,.8)";tctx2.lineWidth=Math.max(2,fs/4);
+              tctx2.strokeText(String(num),r.cx,r.cy);
+              tctx2.fillStyle=lum>128?"#000":"#fff";
+              tctx2.fillText(String(num),r.cx,r.cy);
+            }
           });
         }
         openPrintWindow(tc2.toDataURL("image/png"));
