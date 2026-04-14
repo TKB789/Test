@@ -7569,7 +7569,7 @@ const NotebookPanel=()=>{
         </div>
         <button onClick={doSave} style={tbtn(saved?{background:"rgba(67,233,123,.15)",border:"1px solid rgba(67,233,123,.3)",color:"#43e97b",padding:"6px 10px",fontSize:11}:{color:"#aaa",padding:"6px 10px",fontSize:11})}>{saved?"Saved ✓":"Save"}</button>
       </div>
-      {/* Convert row */}
+      {/* Row 1: Convert */}
       <div style={{display:"flex",alignItems:"center",gap:3,padding:"4px 10px 2px",flexShrink:0,flexWrap:"wrap"}}>
         <span style={{fontSize:10,opacity:.4,fontWeight:700}}>Convert:</span>
         {[8,16,32].map(n=>(
@@ -7580,20 +7580,40 @@ const NotebookPanel=()=>{
           style={tbtn({background:"rgba(102,126,234,.1)",border:"1px solid rgba(102,126,234,.2)",color:"#a8b4f0",fontSize:10,padding:"5px 8px"})}>{isConverting?"...":"📷Go"}</button>
         <button onClick={()=>doConvert(0)} disabled={isConverting}
           style={tbtn({background:"rgba(240,147,251,.1)",border:"1px solid rgba(240,147,251,.2)",color:"#f093fb",fontSize:10,padding:"5px 8px"})}>{isConverting?"...":"📷All"}</button>
-        {(artStyle==="poly"||artStyle==="vector")&&<>
-          <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
-          <span style={{fontSize:9,opacity:.4}}>Detail:</span>
-          {artStyle==="poly"&&[{v:100,l:"Low"},{v:300,l:"Med"},{v:600,l:"High"},{v:1200,l:"Ultra"}].map(d=>(
-            <button key={d.v} onClick={()=>setPolyDensity(d.v)} style={{padding:"3px 6px",borderRadius:6,fontSize:9,fontWeight:700,border:polyDensity===d.v?"1px solid rgba(102,126,234,.5)":"1px solid rgba(255,255,255,.06)",background:polyDensity===d.v?"rgba(102,126,234,.15)":"transparent",color:polyDensity===d.v?"#a8b4f0":"#666",cursor:"pointer"}}>{d.l}</button>))}
-          {artStyle==="vector"&&[{v:"low",l:"Smooth"},{v:"med",l:"Med"},{v:"high",l:"Detailed"},{v:"ultra",l:"Sharp"}].map(d=>(
-            <button key={d.v} onClick={()=>setVecDensity(d.v)} style={{padding:"3px 6px",borderRadius:6,fontSize:9,fontWeight:700,border:vecDensity===d.v?"1px solid rgba(102,126,234,.5)":"1px solid rgba(255,255,255,.06)",background:vecDensity===d.v?"rgba(102,126,234,.15)":"transparent",color:vecDensity===d.v?"#a8b4f0":"#666",cursor:"pointer"}}>{d.l}</button>))}
+      </div>
+      {/* Row 2: Pixel=Size, Flat/Poly=Detail */}
+      <div style={{display:"flex",alignItems:"center",gap:3,padding:"2px 10px",flexShrink:0,flexWrap:"wrap"}}>
+        {artStyle==="pixel"&&<>
+          <span style={{fontSize:10,opacity:.4,fontWeight:700}}>Size:</span>
+          {[{id:"16x16",l:"16"},{id:"32x32",l:"32"},{id:"48x48",l:"48"},{id:"64x64",l:"64"},{id:"128x128",l:"128"}].map(s=>{
+            const currentSize=(page.pixelSize||"32x32");const active=currentSize===s.id;
+            return(<button key={s.id} onClick={()=>{
+              if(active)return;
+              if(!confirm(`Resize grid to ${s.l}×${s.l}? Pixels outside the new grid will be trimmed.`))return;
+              const d2=readNb();if(!d2.pages?.[nbPageIdx])return;
+              d2.pages[nbPageIdx].pixelSize=s.id;
+              const newDim=Number(s.l);const oldPx=d2.pages[nbPageIdx].pixels||{};const newPx={};
+              Object.entries(oldPx).forEach(([key,color])=>{const[r,c]=key.split("-").map(Number);if(r<newDim&&c<newDim)newPx[key]=color;});
+              d2.pages[nbPageIdx].pixels=newPx;
+              writeNb(d2);setNbData({...d2});setTimeout(drawPixelGrid,50);
+            }} style={{padding:"3px 6px",borderRadius:6,fontSize:10,fontWeight:700,border:active?"1px solid rgba(96,165,250,.5)":"1px solid rgba(255,255,255,.06)",background:active?"rgba(96,165,250,.15)":"transparent",color:active?"#60a5fa":"#666",cursor:"pointer"}}>{s.l}</button>);})}
+        </>}
+        {artStyle==="poly"&&<>
+          <span style={{fontSize:10,opacity:.4,fontWeight:700}}>Detail:</span>
+          {[{v:100,l:"Low"},{v:300,l:"Med"},{v:600,l:"High"},{v:1200,l:"Ultra"}].map(d=>(
+            <button key={d.v} onClick={()=>setPolyDensity(d.v)} style={{padding:"3px 6px",borderRadius:6,fontSize:10,fontWeight:700,border:polyDensity===d.v?"1px solid rgba(102,126,234,.5)":"1px solid rgba(255,255,255,.06)",background:polyDensity===d.v?"rgba(102,126,234,.15)":"transparent",color:polyDensity===d.v?"#a8b4f0":"#666",cursor:"pointer"}}>{d.l}</button>))}
+        </>}
+        {artStyle==="vector"&&<>
+          <span style={{fontSize:10,opacity:.4,fontWeight:700}}>Detail:</span>
+          {[{v:"low",l:"Smooth"},{v:"med",l:"Med"},{v:"high",l:"Detailed"},{v:"ultra",l:"Sharp"}].map(d=>(
+            <button key={d.v} onClick={()=>setVecDensity(d.v)} style={{padding:"3px 6px",borderRadius:6,fontSize:10,fontWeight:700,border:vecDensity===d.v?"1px solid rgba(102,126,234,.5)":"1px solid rgba(255,255,255,.06)",background:vecDensity===d.v?"rgba(102,126,234,.15)":"transparent",color:vecDensity===d.v?"#a8b4f0":"#666",cursor:"pointer"}}>{d.l}</button>))}
         </>}
       </div>
-      {/* Original photo opacity slider (vector only) */}
+      {/* Row 3: Original photo opacity slider */}
       {(page.vectorOriginal||page.pixOriginal||page.polyOriginal)&&<div style={{display:"flex",alignItems:"center",gap:4,padding:"2px 10px",flexShrink:0}}>
-        <span style={{fontSize:10,opacity:.4}}>📷 Original:</span>
+        <span style={{fontSize:10,opacity:.4,whiteSpace:"nowrap"}}>📷 Original:</span>
         <input type="range" min="0" max="100" value={vecOrigOpacity*100} onChange={e=>setVecOrigOpacity(Number(e.target.value)/100)}
-          style={{flex:1,height:4,accentColor:"#60a5fa",opacity:.7,maxWidth:240}}/>
+          style={{flex:1,height:4,accentColor:"#60a5fa",opacity:.7}}/>
         <span style={{fontSize:9,opacity:.3}}>{Math.round(vecOrigOpacity*100)}%</span>
       </div>}
 
@@ -7953,21 +7973,6 @@ const NotebookPanel=()=>{
           <span style={{fontSize:10,opacity:.3,fontWeight:700}}>Grid:</span>
           {[{v:0,l:"Off"},{v:5,l:"5"},{v:10,l:"10"},{v:20,l:"20"}].map(g=>(
             <button key={g.v} onClick={()=>setPixelGridLines(g.v)} style={{padding:"3px 6px",borderRadius:6,fontSize:10,fontWeight:700,border:pixelGridLines===g.v?"1px solid rgba(254,202,87,.5)":"1px solid rgba(255,255,255,.06)",background:pixelGridLines===g.v?"rgba(254,202,87,.12)":"transparent",color:pixelGridLines===g.v?"#feca57":"#666",cursor:"pointer"}}>{g.l}</button>))}
-          <div style={{width:1,height:24,background:"rgba(255,255,255,.08)"}}/>
-          <span style={{fontSize:10,opacity:.3,fontWeight:700}}>Size:</span>
-          {[{id:"16x16",l:"16"},{id:"32x32",l:"32"},{id:"48x48",l:"48"},{id:"64x64",l:"64"},{id:"128x128",l:"128"}].map(s=>{
-            const currentSize=(page.pixelSize||"32x32");const active=currentSize===s.id;
-            return(<button key={s.id} onClick={()=>{
-              if(active)return;
-              if(!confirm(`Resize grid to ${s.l}×${s.l}? Pixels outside the new grid will be trimmed.`))return;
-              const d2=readNb();if(!d2.pages?.[nbPageIdx])return;
-              d2.pages[nbPageIdx].pixelSize=s.id;
-              // Trim pixels that fall outside new bounds
-              const newDim=Number(s.l);const oldPx=d2.pages[nbPageIdx].pixels||{};const newPx={};
-              Object.entries(oldPx).forEach(([key,color])=>{const[r,c]=key.split("-").map(Number);if(r<newDim&&c<newDim)newPx[key]=color;});
-              d2.pages[nbPageIdx].pixels=newPx;
-              writeNb(d2);setNbData({...d2});setTimeout(drawPixelGrid,50);
-            }} style={{padding:"3px 6px",borderRadius:6,fontSize:10,fontWeight:700,border:active?"1px solid rgba(96,165,250,.5)":"1px solid rgba(255,255,255,.06)",background:active?"rgba(96,165,250,.15)":"transparent",color:active?"#60a5fa":"#666",cursor:"pointer"}}>{s.l}</button>);})}
         </>}
         {artStyle==="vector"&&<>
           <div style={{width:1,height:24,background:"rgba(255,255,255,.08)"}}/>
