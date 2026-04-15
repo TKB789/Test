@@ -6374,12 +6374,21 @@ const NotebookPanel=()=>{
     drawCanvasHeightRef.current=newH;
   };
   const loadCanvas=()=>{const c=drawCanvasRef.current;if(!c)return;
-    const h=getDrawCanvasHeight();if(c.height!==h){c.height=h;c.style.height=h+"px";drawCanvasHeightRef.current=h;}
     const ctx=c.getContext("2d");
     ctx.clearRect(0,0,c.width,c.height);drawImgRef.current=null;drawUndoStack.current=[];drawRedoStack.current=[];
     const d=readNb();const src=d.pages?.[pageIdxRef.current]?.drawData||null;
-    if(src){drawImgRef.current=src;const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0);};img.src=src;}};
-  const drawPinchDist=React.useRef(null);
+    const textH=getDrawCanvasHeight();
+    if(src){
+      drawImgRef.current=src;const img=new Image();img.onload=()=>{
+        // Use the larger of text height or saved image height
+        const h=Math.max(textH,img.naturalHeight,600);
+        if(c.height!==h){c.height=h;c.style.height=h+"px";drawCanvasHeightRef.current=h;}
+        ctx.drawImage(img,0,0);
+      };img.src=src;
+    } else {
+      const h=Math.max(textH,600);
+      if(c.height!==h){c.height=h;c.style.height=h+"px";drawCanvasHeightRef.current=h;}
+    }};  const drawPinchDist=React.useRef(null);
   const drawPendingDown=React.useRef(null);
   const drawStartPos=React.useRef(null);
   const drawScrollRef=React.useRef(null); // track two-finger scroll
@@ -6489,11 +6498,12 @@ const NotebookPanel=()=>{
     if(!isDrawingRef.current){saveCanvas();return;}isDrawingRef.current=false;
     const c=drawCanvasRef.current;if(c)c.getContext("2d").globalCompositeOperation="source-over";saveCanvas();},[]);
   const canvasCallbackRef=React.useCallback((node)=>{if(node){
-    // If this is the same node we already set up, skip re-init
-    if(drawCanvasRef.current===node)return;
+    const initKey=`${nbPageIdx}_${pageDrawMode}`;
+    if(drawCanvasRef.current===node&&node.dataset.initKey===initKey)return;
+    node.dataset.initKey=initKey;
     drawCanvasRef.current=node;
-    node.width=360;
-    const h=getDrawCanvasHeight();node.height=h;node.style.height=h+"px";drawCanvasHeightRef.current=h;
+    if(!node.width)node.width=360;
+    if(!node.height||node.height<2){node.height=600;node.style.height="600px";drawCanvasHeightRef.current=600;}
     node.addEventListener("touchstart",onDown,{passive:false});node.addEventListener("touchmove",onMove,{passive:false});
     node.addEventListener("touchend",onUp);node.addEventListener("mousedown",onDown);
     node.addEventListener("mousemove",onMove);node.addEventListener("mouseup",onUp);node.addEventListener("mouseleave",onUp);
@@ -7038,7 +7048,7 @@ const NotebookPanel=()=>{
   ];
   const getPageBg=(page)=>page?.bgColor||"";
   const isLightBg=(bg)=>{if(!bg)return false;const h=bg.replace("#","");if(h.length!==6)return false;const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return(r*.299+g*.587+b*.114)>150;};
-  const PageBg=({type,bgColor,children})=>{
+  const PageBg=useMemo(()=>({type,bgColor,children})=>{
     const bg=bgColor||"rgba(255,255,255,.02)";
     const light=isLightBg(bgColor);
     const lineColor=light?"rgba(0,0,0,.08)":"rgba(255,255,255,.06)";
@@ -7058,7 +7068,7 @@ const NotebookPanel=()=>{
           <circle cx={hcol*1.5} cy={hoff} r="1.2" fill={dotColor}/></pattern></defs>
         <rect width="100%" height="100%" fill="url(#hx8)"/></svg>}
       {children}</div>);
-  };
+  },[]);
   const ts=(type,bgColor)=>({width:"100%",minHeight:600,padding:type==="lined"?"6px 14px":type==="square"?"2px 14px":type==="hex"?"13px 14px":"14px",
     background:"transparent",border:"none",color:isLightBg(bgColor)?"#1a1a2e":"#e8e0f0",fontSize:15,
     lineHeight:type==="lined"?"28px":type==="square"?"24px":type==="hex"?"35px":"1.6",
