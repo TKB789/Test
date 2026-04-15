@@ -6350,17 +6350,34 @@ const NotebookPanel=()=>{
   };
   const drawUndoStack=React.useRef([]); // ImageData snapshots
   const drawRedoStack=React.useRef([]);
-  const pushDrawUndo=()=>{const c=drawCanvasRef.current;if(!c)return;try{const ctx=c.getContext("2d");drawUndoStack.current.push(ctx.getImageData(0,0,c.width,c.height));if(drawUndoStack.current.length>30)drawUndoStack.current.shift();drawRedoStack.current=[];}catch{}};
+  const pushDrawUndo=()=>{const c=drawCanvasRef.current;if(!c)return;try{drawUndoStack.current.push(c.toDataURL());if(drawUndoStack.current.length>30)drawUndoStack.current.shift();drawRedoStack.current=[];}catch{}};
   const undoDraw=()=>{const c=drawCanvasRef.current;if(!c||!drawUndoStack.current.length)return;const ctx=c.getContext("2d");
-    drawRedoStack.current.push(ctx.getImageData(0,0,c.width,c.height));
-    const prev=drawUndoStack.current.pop();ctx.putImageData(prev,0,0);saveCanvas();};
+    drawRedoStack.current.push(c.toDataURL());
+    const prev=drawUndoStack.current.pop();ctx.clearRect(0,0,c.width,c.height);const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0);saveCanvas();};img.src=prev;};
   const redoDraw=()=>{const c=drawCanvasRef.current;if(!c||!drawRedoStack.current.length)return;const ctx=c.getContext("2d");
-    drawUndoStack.current.push(ctx.getImageData(0,0,c.width,c.height));
-    const next=drawRedoStack.current.pop();ctx.putImageData(next,0,0);saveCanvas();};
-  const loadCanvas=()=>{const c=drawCanvasRef.current;if(!c)return;const ctx=c.getContext("2d");
+    drawUndoStack.current.push(c.toDataURL());
+    const next=drawRedoStack.current.pop();ctx.clearRect(0,0,c.width,c.height);const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0);saveCanvas();};img.src=next;};
+  const drawCanvasHeightRef=React.useRef(600);
+  const drawTextMeasureRef=React.useRef(null);
+  const getDrawCanvasHeight=()=>{
+    const m=drawTextMeasureRef.current;if(!m)return 600;
+    return Math.max(600,m.scrollHeight+40);
+  };
+  const resizeDrawCanvas=(newH)=>{
+    const c=drawCanvasRef.current;if(!c)return;
+    const oldH=c.height;if(newH===oldH)return;
+    const ctx=c.getContext("2d");
+    const imgData=ctx.getImageData(0,0,c.width,Math.min(oldH,newH));
+    c.height=newH;c.style.height=newH+"px";
+    ctx.putImageData(imgData,0,0);
+    drawCanvasHeightRef.current=newH;
+  };
+  const loadCanvas=()=>{const c=drawCanvasRef.current;if(!c)return;
+    const h=getDrawCanvasHeight();if(c.height!==h){c.height=h;c.style.height=h+"px";drawCanvasHeightRef.current=h;}
+    const ctx=c.getContext("2d");
     ctx.clearRect(0,0,c.width,c.height);drawImgRef.current=null;drawUndoStack.current=[];drawRedoStack.current=[];
     const d=readNb();const src=d.pages?.[pageIdxRef.current]?.drawData||null;
-    if(src){drawImgRef.current=src;const img=new Image();img.onload=()=>ctx.drawImage(img,0,0);img.src=src;}};
+    if(src){drawImgRef.current=src;const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0);};img.src=src;}};
   const drawPinchDist=React.useRef(null);
   const drawPendingDown=React.useRef(null);
   const drawStartPos=React.useRef(null);
@@ -6430,7 +6447,20 @@ const NotebookPanel=()=>{
     }
     if(!isDrawingRef.current)return;e.preventDefault();const c=drawCanvasRef.current;if(!c)return;const ctx=c.getContext("2d");
     const r=c.getBoundingClientRect(),sx=c.width/r.width,sy=c.height/r.height;const t=e.touches?e.touches[0]:e;
-    ctx.lineTo((t.clientX-r.left)*sx,(t.clientY-r.top)*sy);ctx.stroke();},[]);
+    const drawY=(t.clientY-r.top)*sy;
+    ctx.lineTo((t.clientX-r.left)*sx,drawY);ctx.stroke();
+    // Auto-extend canvas when drawing near the bottom
+    if(drawY>c.height-60){
+      const newH=c.height+300;
+      const snap=c.toDataURL();
+      c.height=newH;c.style.height=newH+"px";drawCanvasHeightRef.current=newH;
+      const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0);
+        // Restore drawing state after resize
+        if(eraserRef.current){ctx.globalCompositeOperation="destination-out";ctx.lineWidth=eraserSizeRef.current;}
+        else{ctx.globalCompositeOperation="source-over";ctx.strokeStyle=colorRef.current;ctx.fillStyle=colorRef.current;ctx.lineWidth=sizeRef.current;}
+        ctx.lineCap="round";ctx.lineJoin="round";ctx.beginPath();ctx.moveTo((t.clientX-r.left)*sx,drawY);
+      };img.src=snap;
+    }},[]);
   const onUp=React.useCallback((e)=>{
     // Flush pending dot for single tap
     if(drawPendingDown.current){
@@ -6448,6 +6478,7 @@ const NotebookPanel=()=>{
     if(!isDrawingRef.current){saveCanvas();return;}isDrawingRef.current=false;
     const c=drawCanvasRef.current;if(c)c.getContext("2d").globalCompositeOperation="source-over";saveCanvas();},[]);
   const canvasCallbackRef=React.useCallback((node)=>{if(node){drawCanvasRef.current=node;
+    const h=getDrawCanvasHeight();node.height=h;node.style.height=h+"px";drawCanvasHeightRef.current=h;
     node.addEventListener("touchstart",onDown,{passive:false});node.addEventListener("touchmove",onMove,{passive:false});
     node.addEventListener("touchend",onUp);node.addEventListener("mousedown",onDown);
     node.addEventListener("mousemove",onMove);node.addEventListener("mouseup",onUp);node.addEventListener("mouseleave",onUp);
@@ -8265,23 +8296,20 @@ const NotebookPanel=()=>{
               } onInput={onTextInput} onBlur={()=>saveText()} placeholder="Start writing..." style={{...ts(page.type,page.bgColor),position:"relative",zIndex:1}}/>
             </div>}
             {pageDrawMode&&<div style={{position:"relative"}} ref={(el)=>{
-              // Resize canvas to match container width on mount
               if(el&&canvasCallbackRef){
                 const cw=el.offsetWidth||360;
                 const existingCanvas=el.querySelector("canvas");
-                if(existingCanvas&&existingCanvas.width!==cw){
-                  // Don't resize if already set — handled by canvas ref callback
-                }
+                if(existingCanvas&&existingCanvas.width!==cw){}
               }
             }}>
-              {(()=>{const baseTs=ts(page.type,page.bgColor);return <div style={{position:"absolute",top:0,left:0,width:"100%",minHeight:600,
+              {(()=>{const baseTs=ts(page.type,page.bgColor);return <div ref={drawTextMeasureRef} style={{position:"absolute",top:0,left:0,width:"100%",minHeight:600,
                 padding:baseTs.padding,fontSize:`${baseTs.fontSize||15}px`,
                 lineHeight:baseTs.lineHeight,
                 fontFamily:baseTs.fontFamily||"'Nunito',sans-serif",
                 color:"rgba(232,224,240,.4)",whiteSpace:"pre-wrap",wordBreak:"break-word",pointerEvents:"none",zIndex:0,
                 boxSizing:"border-box"}}>{textRef.current}</div>;})()}
               <canvas ref={canvasCallbackRef} width={360} height={600}
-                style={{width:"100%",height:600,touchAction:"pan-x pan-y pinch-zoom",background:"transparent",display:"block",position:"relative",zIndex:1}}/>
+                style={{width:"100%",touchAction:"pan-x pan-y pinch-zoom",background:"transparent",display:"block",position:"relative",zIndex:1}}/>
             </div>}
           </PageBg>
         </div></div></div>);
