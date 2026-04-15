@@ -6303,6 +6303,7 @@ const NotebookPanel=()=>{
   const movePageInToc=(idx,dir)=>{const d=readNb();const ni=idx+dir;if(ni<0||ni>=d.pages.length)return;[d.pages[idx],d.pages[ni]]=[d.pages[ni],d.pages[idx]];saveNb(d);setNbExpandedIdx(ni);};
 
   const drawCanvasRef=React.useRef(null);
+  const drawScrollContainerRef=React.useRef(null);
   const isDrawingRef=React.useRef(false);
   const saveTimerRef=React.useRef(null);
   const drawImgRef=React.useRef(null);
@@ -6381,14 +6382,18 @@ const NotebookPanel=()=>{
   const drawPinchDist=React.useRef(null);
   const drawPendingDown=React.useRef(null);
   const drawStartPos=React.useRef(null);
+  const drawScrollRef=React.useRef(null); // track two-finger scroll
   const onDown=React.useCallback((e)=>{
     if(e.touches&&e.touches.length>1){
-      // Two fingers — cancel any pending dot, switch to pinch
+      // Two fingers — cancel any pending dot, prepare for scroll/pinch
       if(drawPendingDown.current){clearTimeout(drawPendingDown.current);drawPendingDown.current=null;}
       isDrawingRef.current=false;
       const t1=e.touches[0],t2=e.touches[1];
       drawPinchDist.current=Math.hypot(t1.clientX-t2.clientX,t1.clientY-t2.clientY);
-      e.preventDefault();return;
+      const midY=(t1.clientY+t2.clientY)/2;
+      const scrollEl=drawScrollContainerRef.current;
+      drawScrollRef.current={startY:midY,scrollTop:scrollEl?.scrollTop||0,el:scrollEl};
+      return; // Don't preventDefault — allow native scroll as fallback
     }
     const c=drawCanvasRef.current;if(!c)return;
     const r=c.getBoundingClientRect(),sx=c.width/r.width,sy=c.height/r.height;
@@ -6421,14 +6426,21 @@ const NotebookPanel=()=>{
   },[]);
   const onMove=React.useCallback((e)=>{
     if(e.touches&&e.touches.length>1){
-      // Pinch zoom
+      // Two-finger: scroll + optional pinch
       if(drawPendingDown.current){clearTimeout(drawPendingDown.current);drawPendingDown.current=null;}
       isDrawingRef.current=false;
       const t1=e.touches[0],t2=e.touches[1];
+      // Scroll via two-finger pan
+      const midY=(t1.clientY+t2.clientY)/2;
+      if(drawScrollRef.current&&drawScrollRef.current.el){
+        const dy=drawScrollRef.current.startY-midY;
+        drawScrollRef.current.el.scrollTop=drawScrollRef.current.scrollTop+dy;
+      }
+      // Pinch zoom
       const dist=Math.hypot(t1.clientX-t2.clientX,t1.clientY-t2.clientY);
       if(drawPinchDist.current!==null){
         const scale=dist/drawPinchDist.current;
-        if(Math.abs(scale-1)>0.01)setPageZoom(z=>Math.max(0.3,Math.min(8,z*scale)));
+        if(Math.abs(scale-1)>0.03)setPageZoom(z=>Math.max(0.3,Math.min(8,z*scale)));
       }
       drawPinchDist.current=dist;
       e.preventDefault();return;
@@ -6474,7 +6486,7 @@ const NotebookPanel=()=>{
         if(sp){ctx.beginPath();ctx.arc(sp.x,sp.y,eraserRef.current?eraserSizeRef.current/2:sizeRef.current/2,0,Math.PI*2);ctx.fill();}
       }
     }
-    drawPinchDist.current=null;drawStartPos.current=null;
+    drawPinchDist.current=null;drawStartPos.current=null;drawScrollRef.current=null;
     if(!isDrawingRef.current){saveCanvas();return;}isDrawingRef.current=false;
     const c=drawCanvasRef.current;if(c)c.getContext("2d").globalCompositeOperation="source-over";saveCanvas();},[]);
   const canvasCallbackRef=React.useCallback((node)=>{if(node){drawCanvasRef.current=node;
@@ -8281,7 +8293,7 @@ const NotebookPanel=()=>{
             style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>🖨 Print</button>
         </div>
       </div>}
-      <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch"}}>
+      <div ref={drawScrollContainerRef} style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch"}}>
         <div style={{transform:`scale(${pageZoom})`,transformOrigin:"top left",width:`${100/pageZoom}%`}}>
           <PageBg type={page.type} bgColor={page.bgColor}>
             {!pageDrawMode&&<div style={{position:"relative"}}>
@@ -8309,7 +8321,7 @@ const NotebookPanel=()=>{
                 color:"rgba(232,224,240,.4)",whiteSpace:"pre-wrap",wordBreak:"break-word",pointerEvents:"none",zIndex:0,
                 boxSizing:"border-box"}}>{textRef.current}</div>;})()}
               <canvas ref={canvasCallbackRef} width={360} height={600}
-                style={{width:"100%",touchAction:"pan-x pan-y pinch-zoom",background:"transparent",display:"block",position:"relative",zIndex:1}}/>
+                style={{width:"100%",touchAction:"none",background:"transparent",display:"block",position:"relative",zIndex:1}}/>
             </div>}
           </PageBg>
         </div></div></div>);
@@ -8371,8 +8383,8 @@ const NotebookPanel=()=>{
           {p.type!=="pixel"&&p.type!=="vector"&&(p.content||p.drawData)?<div style={{position:"relative",marginBottom:8,borderRadius:6,border:"1px solid rgba(255,255,255,.06)",background:"rgba(255,255,255,.02)",overflow:"hidden",aspectRatio:"5/3",maxHeight:200}}>
             {/* Text layer */}
             {p.content&&<div style={{position:"absolute",inset:0,fontSize:11,color:"rgba(232,224,240,.5)",lineHeight:1.5,padding:"8px 10px",whiteSpace:"pre-wrap",wordBreak:"break-word",overflow:"hidden"}}>{p.content.slice(0,400)}</div>}
-            {/* Drawing layer on top */}
-            {p.drawData&&<img src={p.drawData} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",objectFit:"fill",opacity:.8,pointerEvents:"none"}}/>}
+            {/* Drawing layer on top — show from top, clipped to text area */}
+            {p.drawData&&<img src={p.drawData} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",objectFit:"cover",objectPosition:"top",opacity:.8,pointerEvents:"none"}}/>}
             {/* Fade at bottom */}
             <div style={{position:"absolute",bottom:0,left:0,right:0,height:24,background:"linear-gradient(transparent,rgba(30,25,50,.9))"}}/>
           </div>:null}
