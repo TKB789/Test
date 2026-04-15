@@ -8290,10 +8290,6 @@ const NotebookPanel=()=>{
           ].map(p=>(
             <div key={p.c} onClick={()=>{setDrawColor(p.c);setDrawEraser(false);}} title={p.l} style={{width:24,height:24,borderRadius:5,background:p.c,border:drawColor===p.c&&!drawEraser?"2px solid #feca57":"1px solid rgba(255,255,255,.15)",cursor:"pointer",opacity:drawEraser?.4:1}}/>))}
           <button onClick={()=>{setShowDrawPicker(v=>!v);setDrawPaletteSearch("");}} style={btn({padding:"4px 8px",fontSize:11,color:showDrawPicker?"#feca57":"#888"})}>{showDrawPicker?"▼":"🎨"}</button>
-          <div style={{flex:1}}/>
-          <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={btn({padding:"4px 6px",fontSize:14})}>−</button>
-          <span style={{fontSize:10,opacity:.4,minWidth:28,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
-          <button onClick={()=>setPageZoom(z=>Math.min(4,z+0.2))} style={btn({padding:"4px 6px",fontSize:14})}>+</button>
         </div>
         {/* Full DMC palette for drawing */}
         {showDrawPicker&&<div style={{padding:"4px 0 4px"}}>
@@ -8302,18 +8298,20 @@ const NotebookPanel=()=>{
             {(drawPaletteSearch.trim()?PIXEL_PALETTE.filter(p=>{const q=drawPaletteSearch.toLowerCase();return p.n.toLowerCase().includes(q)||p.nm.toLowerCase().includes(q);}):PIXEL_PALETTE).map(p=>(<div key={p.n+p.c} onClick={()=>{setDrawColor(p.c);setDrawEraser(false);}} title={`DMC ${p.n} — ${p.nm}`} style={{aspectRatio:"1",borderRadius:3,background:p.c,border:drawColor===p.c&&!drawEraser?"2px solid #feca57":"1px solid rgba(255,255,255,.12)",cursor:"pointer",minWidth:0}}/>))}
           </div>
         </div>}
-        {drawEraser?<div style={{display:"flex",alignItems:"center",gap:4}}>
-          {[6,10,16,20,28,36,48].map(s=>(<div key={s} onClick={()=>setDrawEraserSize(s)}
-            style={{width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:8,
+        <div style={{display:"flex",alignItems:"center",gap:3}}>
+          <button onClick={()=>setPageZoom(z=>Math.max(0.3,z-0.2))} style={btn({padding:"3px 5px",fontSize:12})}>−</button>
+          <span style={{fontSize:9,opacity:.4,minWidth:26,textAlign:"center"}}>{Math.round(pageZoom*100)}%</span>
+          <button onClick={()=>setPageZoom(z=>Math.min(4,z+0.2))} style={btn({padding:"3px 5px",fontSize:12})}>+</button>
+          <div style={{width:1,height:18,background:"rgba(255,255,255,.08)"}}/>
+          {drawEraser?[6,10,16,20,28,36,48].map(s=>(<div key={s} onClick={()=>setDrawEraserSize(s)}
+            style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:6,
               background:drawEraserSize===s?"rgba(245,87,108,.18)":"transparent",border:drawEraserSize===s?"1px solid rgba(245,87,108,.4)":"1px solid transparent",cursor:"pointer"}}>
-            <div style={{width:Math.max(Math.round(s/2.5),3),height:Math.max(Math.round(s/2.5),3),borderRadius:"50%",background:"rgba(245,87,108,.7)"}}/></div>))}
-        </div>:<div style={{display:"flex",alignItems:"center",gap:4}}>
-          {[1,2,3,4,6,8,10,12].map(s=>(<div key={s} onClick={()=>setDrawSize(s)}
-            style={{width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:8,
+            <div style={{width:Math.max(Math.round(s/2.5),3),height:Math.max(Math.round(s/2.5),3),borderRadius:"50%",background:"rgba(245,87,108,.7)"}}/></div>))
+          :[2,3,4,6,8,10,12].map(s=>(<div key={s} onClick={()=>setDrawSize(s)}
+            style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:6,
               background:drawSize===s?"rgba(255,255,255,.12)":"transparent",border:drawSize===s?`1px solid ${drawColor}`:"1px solid transparent",cursor:"pointer"}}>
             <div style={{width:Math.max(s,2),height:Math.max(s,2),borderRadius:"50%",background:drawColor}}/></div>))}
-        </div>}
-        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          <div style={{flex:1}}/>
           <button onClick={()=>{const c=drawCanvasRef.current;const dataUrl=c?c.toDataURL("image/png"):(drawLiveSnapshot.current||"");if(!dataUrl)return;const title=nbData.pages[nbPageIdx]?.title||"Drawing";const content=textRef.current||"";
             const scrollEl=drawScrollContainerRef.current;const pageW=scrollEl?scrollEl.offsetWidth:390;
             const bg=page.bgColor||"#fff";const light=isLightBg(page.bgColor);const textColor=light?"#1a1a2e":"#333";
@@ -8324,7 +8322,7 @@ const NotebookPanel=()=>{
             if(pType==="lined")gridSvg=`<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"><defs><pattern id="pl" width="100%" height="28" patternUnits="userSpaceOnUse" x="0" y="28"><line x1="0" y1="28" x2="100%" y2="28" stroke="${lineC}" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(#pl)"/></svg>`;
             else if(pType==="square")gridSvg=`<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"><defs><pattern id="pg" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="0" cy="0" r="1" fill="${dotC}"/><circle cx="24" cy="0" r="1" fill="${dotC}"/><circle cx="0" cy="24" r="1" fill="${dotC}"/><circle cx="24" cy="24" r="1" fill="${dotC}"/></pattern></defs><rect width="100%" height="100%" fill="url(#pg)"/></svg>`;
             const win=window.open("","_blank");if(win){win.document.write(`<html><head><title>${title}</title><style>@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&display=swap');@media print{body{margin:0;padding:0}.no-print{display:none!important}}body{font-family:'Nunito',sans-serif;margin:0;padding:12px;background:#f5f5f5}h2{margin:0 0 8px;font-size:16px}</style></head><body><h2>${title}</h2><div style="position:relative;width:${pageW}px;background:${bg};border:1px solid ${light?"#ddd":"#444"};border-radius:8px;min-height:400px;overflow:hidden">${gridSvg}<img src="${dataUrl}" style="display:block;width:100%;pointer-events:none" onload="this.style.height=this.naturalHeight*(${pageW}/this.naturalWidth)+'px'"/>${content?`<pre style="white-space:pre-wrap;word-break:break-word;font-family:'Nunito',sans-serif;font-size:15px;line-height:${lh};padding:${pad};margin:0;color:${textColor};position:absolute;top:0;left:0;right:0">${content.replace(/</g,"&lt;")}</pre>`:""}</div><button class="no-print" onclick="window.print()" style="padding:10px 30px;font-size:16px;margin:12px;cursor:pointer">🖨️ Print</button></body></html>`);win.document.close();}}}
-            style={btn({fontSize:10,padding:"3px 8px",color:"#888"})}>🖨 Print</button>
+            style={btn({fontSize:9,padding:"3px 6px",color:"#888"})}>🖨</button>
         </div>
       </div>}
       <div ref={drawScrollContainerRef} style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch"}}>
