@@ -6383,9 +6383,12 @@ const NotebookPanel=()=>{
     const textH=getDrawCanvasHeight();
     if(src){
       const img=new Image();img.onload=()=>{
-        const h=Math.max(textH,img.naturalHeight,600);
+        // Scale height proportionally if image width differs from canvas width
+        const scaleX=c.width/img.naturalWidth;
+        const scaledH=Math.round(img.naturalHeight*scaleX);
+        const h=Math.max(textH,scaledH,600);
         if(c.height!==h){c.height=h;c.style.height=h+"px";drawCanvasHeightRef.current=h;}
-        ctx.drawImage(img,0,0);
+        ctx.drawImage(img,0,0,c.width,scaledH);
       };img.src=src;
     } else {
       const h=Math.max(textH,600);
@@ -6501,7 +6504,9 @@ const NotebookPanel=()=>{
     const c=drawCanvasRef.current;if(c)c.getContext("2d").globalCompositeOperation="source-over";saveCanvas();},[]);
   const canvasCallbackRef=React.useCallback((node)=>{if(node){
     drawCanvasRef.current=node;
-    if(!node.width||node.width<2)node.width=360;
+    // Match canvas internal width to container CSS width for 1:1 mapping with grid lines
+    const containerW=node.parentElement?.offsetWidth||node.offsetWidth||360;
+    if(!node.width||node.width<2||Math.abs(node.width-containerW)>2)node.width=containerW;
     if(!node.height||node.height<2){node.height=600;node.style.height="600px";drawCanvasHeightRef.current=600;}
     if(!node._bindDone){
       node.addEventListener("touchstart",onDown,{passive:false});node.addEventListener("touchmove",onMove,{passive:false});
