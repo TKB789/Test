@@ -6304,6 +6304,7 @@ const NotebookPanel=()=>{
 
   const drawCanvasRef=React.useRef(null);
   const drawScrollContainerRef=React.useRef(null);
+  const drawLiveSnapshot=React.useRef(null); // always holds latest canvas dataURL for recovery
   const isDrawingRef=React.useRef(false);
   const saveTimerRef=React.useRef(null);
   const drawImgRef=React.useRef(null);
@@ -6335,7 +6336,7 @@ const NotebookPanel=()=>{
   };
   const saveCanvas=()=>{
     const c=drawCanvasRef.current;if(!c)return;
-    try{const url=c.toDataURL("image/png");drawImgRef.current=url;save("drawData",url);}catch{}
+    try{const url=c.toDataURL("image/png");drawImgRef.current=url;drawLiveSnapshot.current=url;save("drawData",url);}catch{}
   };
   const saveAll=()=>{saveText();saveCanvas();};
   const doSave=()=>{saveAll();setSaved(true);setTimeout(()=>setSaved(false),1500);};
@@ -6375,12 +6376,13 @@ const NotebookPanel=()=>{
   };
   const loadCanvas=()=>{const c=drawCanvasRef.current;if(!c)return;
     const ctx=c.getContext("2d");
-    ctx.clearRect(0,0,c.width,c.height);drawImgRef.current=null;drawUndoStack.current=[];drawRedoStack.current=[];
-    const d=readNb();const src=d.pages?.[pageIdxRef.current]?.drawData||null;
+    ctx.clearRect(0,0,c.width,c.height);drawUndoStack.current=[];drawRedoStack.current=[];
+    // Prefer live snapshot (survives remounts) over stored data
+    const src=drawLiveSnapshot.current||getDrawData();
+    drawImgRef.current=src;
     const textH=getDrawCanvasHeight();
     if(src){
-      drawImgRef.current=src;const img=new Image();img.onload=()=>{
-        // Use the larger of text height or saved image height
+      const img=new Image();img.onload=()=>{
         const h=Math.max(textH,img.naturalHeight,600);
         if(c.height!==h){c.height=h;c.style.height=h+"px";drawCanvasHeightRef.current=h;}
         ctx.drawImage(img,0,0);
@@ -6498,15 +6500,15 @@ const NotebookPanel=()=>{
     if(!isDrawingRef.current){saveCanvas();return;}isDrawingRef.current=false;
     const c=drawCanvasRef.current;if(c)c.getContext("2d").globalCompositeOperation="source-over";saveCanvas();},[]);
   const canvasCallbackRef=React.useCallback((node)=>{if(node){
-    const initKey=`${nbPageIdx}_${pageDrawMode}`;
-    if(drawCanvasRef.current===node&&node.dataset.initKey===initKey)return;
-    node.dataset.initKey=initKey;
     drawCanvasRef.current=node;
-    if(!node.width)node.width=360;
+    if(!node.width||node.width<2)node.width=360;
     if(!node.height||node.height<2){node.height=600;node.style.height="600px";drawCanvasHeightRef.current=600;}
-    node.addEventListener("touchstart",onDown,{passive:false});node.addEventListener("touchmove",onMove,{passive:false});
-    node.addEventListener("touchend",onUp);node.addEventListener("mousedown",onDown);
-    node.addEventListener("mousemove",onMove);node.addEventListener("mouseup",onUp);node.addEventListener("mouseleave",onUp);
+    if(!node._bindDone){
+      node.addEventListener("touchstart",onDown,{passive:false});node.addEventListener("touchmove",onMove,{passive:false});
+      node.addEventListener("touchend",onUp);node.addEventListener("mousedown",onDown);
+      node.addEventListener("mousemove",onMove);node.addEventListener("mouseup",onUp);node.addEventListener("mouseleave",onUp);
+      node._bindDone=true;
+    }
     setTimeout(loadCanvas,50);}},[nbPageIdx,pageDrawMode]);
 
   // ─── PIXEL ART ──────────────────────────────────────────────────
@@ -7019,7 +7021,7 @@ const NotebookPanel=()=>{
     const d=readNb();const page=d.pages?.[nbPageIdx];
     textRef.current=page?.content||"";
     if(textareaRef.current){textareaRef.current.value=textRef.current;setTimeout(autoGrowTextarea,0);}
-    drawImgRef.current=null;drawCanvasRef.current=null;
+    drawImgRef.current=null;drawCanvasRef.current=null;drawLiveSnapshot.current=null;
     setPageDrawMode(false);setPageZoom(1);setRenaming(false);undoRef.current=[textRef.current];redoRef.current=[];pixelUndoRef.current=[];pixelRedoRef.current=[];drawUndoStack.current=[];drawRedoStack.current=[];
   },[nbPageIdx]);
 
@@ -7037,8 +7039,8 @@ const NotebookPanel=()=>{
 
   // ─── NAVIGATION ─────────────────────────────────────────────────
   const goToc=()=>{saveAll();saveVecDraw();syncState();setPageDrawMode(false);setPageZoom(1);vecDrawCanvasRef.current=null;setNbView("toc");};
-  const goPrev=()=>{saveAll();saveVecDraw();drawImgRef.current=null;drawCanvasRef.current=null;vecDrawCanvasRef.current=null;pageIdxRef.current=pageIdxRef.current-1;setNbPageIdx(i=>i-1);};
-  const goNext=()=>{saveAll();saveVecDraw();drawImgRef.current=null;drawCanvasRef.current=null;vecDrawCanvasRef.current=null;pageIdxRef.current=pageIdxRef.current+1;setNbPageIdx(i=>i+1);};
+  const goPrev=()=>{saveAll();saveVecDraw();drawImgRef.current=null;drawCanvasRef.current=null;drawLiveSnapshot.current=null;vecDrawCanvasRef.current=null;pageIdxRef.current=pageIdxRef.current-1;setNbPageIdx(i=>i-1);};
+  const goNext=()=>{saveAll();saveVecDraw();drawImgRef.current=null;drawCanvasRef.current=null;drawLiveSnapshot.current=null;vecDrawCanvasRef.current=null;pageIdxRef.current=pageIdxRef.current+1;setNbPageIdx(i=>i+1);};
 
   // ─── STYLES ─────────────────────────────────────────────────────
   const hs=20,hcol=hs*1.5,hrow=Math.round(hs*Math.sqrt(3)),hoff=Math.round(hrow/2);
@@ -7048,27 +7050,24 @@ const NotebookPanel=()=>{
   ];
   const getPageBg=(page)=>page?.bgColor||"";
   const isLightBg=(bg)=>{if(!bg)return false;const h=bg.replace("#","");if(h.length!==6)return false;const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return(r*.299+g*.587+b*.114)>150;};
-  const PageBg=useMemo(()=>({type,bgColor,children})=>{
-    const bg=bgColor||"rgba(255,255,255,.02)";
-    const light=isLightBg(bgColor);
+  const pageBgStyle=(bgColor)=>{const bg=bgColor||"rgba(255,255,255,.02)";const light=isLightBg(bgColor);
+    return{position:"relative",background:bg,borderRadius:8,border:"1px solid "+(light?"rgba(0,0,0,.1)":"rgba(255,255,255,.06)"),width:"100%",minHeight:600};};
+  const pageBgSvg=(type,bgColor)=>{const light=isLightBg(bgColor);
     const lineColor=light?"rgba(0,0,0,.08)":"rgba(255,255,255,.06)";
     const dotColor=light?"rgba(0,0,0,.12)":"rgba(255,255,255,.08)";
-    return(
-    <div style={{position:"relative",background:bg,borderRadius:8,border:"1px solid "+(light?"rgba(0,0,0,.1)":"rgba(255,255,255,.06)"),width:"100%",minHeight:600}}>
-      {type==="lined"&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
+    if(type==="lined")return <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
         <defs><pattern id="lined28" width="100%" height="28" patternUnits="userSpaceOnUse" x="0" y="28"><line x1="0" y1="28" x2="100%" y2="28" stroke={lineColor} strokeWidth="1"/></pattern></defs>
-        <rect width="100%" height="100%" fill="url(#lined28)"/></svg>}
-      {type==="square"&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
+        <rect width="100%" height="100%" fill="url(#lined28)"/></svg>;
+    if(type==="square")return <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
         <defs><pattern id="sq8" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="0" cy="0" r="1" fill={dotColor}/><circle cx="24" cy="0" r="1" fill={dotColor}/><circle cx="0" cy="24" r="1" fill={dotColor}/><circle cx="24" cy="24" r="1" fill={dotColor}/></pattern></defs>
-        <rect width="100%" height="100%" fill="url(#sq8)"/></svg>}
-      {type==="hex"&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
+        <rect width="100%" height="100%" fill="url(#sq8)"/></svg>;
+    if(type==="hex")return <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
         <defs><pattern id="hx8" width={hcol*2} height={hrow} patternUnits="userSpaceOnUse">
           <circle cx="0" cy="0" r="1.2" fill={dotColor}/><circle cx={hcol} cy="0" r="1.2" fill={dotColor}/>
           <circle cx={hcol*2} cy="0" r="1.2" fill={dotColor}/><circle cx={hcol*0.5} cy={hoff} r="1.2" fill={dotColor}/>
           <circle cx={hcol*1.5} cy={hoff} r="1.2" fill={dotColor}/></pattern></defs>
-        <rect width="100%" height="100%" fill="url(#hx8)"/></svg>}
-      {children}</div>);
-  },[]);
+        <rect width="100%" height="100%" fill="url(#hx8)"/></svg>;
+    return null;};
   const ts=(type,bgColor)=>({width:"100%",minHeight:600,padding:type==="lined"?"6px 14px":type==="square"?"2px 14px":type==="hex"?"13px 14px":"14px",
     background:"transparent",border:"none",color:isLightBg(bgColor)?"#1a1a2e":"#e8e0f0",fontSize:15,
     lineHeight:type==="lined"?"28px":type==="square"?"24px":type==="hex"?"35px":"1.6",
@@ -8308,7 +8307,8 @@ const NotebookPanel=()=>{
       </div>}
       <div ref={drawScrollContainerRef} style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch"}}>
         <div style={{transform:`scale(${pageZoom})`,transformOrigin:"top left",width:`${100/pageZoom}%`}}>
-          <PageBg type={page.type} bgColor={page.bgColor}>
+          <div style={pageBgStyle(page.bgColor)}>
+            {pageBgSvg(page.type,page.bgColor)}
             {!pageDrawMode&&<div style={{position:"relative"}}>
               {existingDraw&&<img src={existingDraw} style={{position:"absolute",top:0,left:0,width:"100%",height:"auto",pointerEvents:"none",opacity:.7,zIndex:2}}/>}
               <textarea ref={(el)=>{if(el){
@@ -8336,7 +8336,7 @@ const NotebookPanel=()=>{
               <canvas ref={canvasCallbackRef}
                 style={{width:"100%",touchAction:"none",background:"transparent",display:"block",position:"relative",zIndex:1}}/>
             </div>}
-          </PageBg>
+          </div>
         </div></div></div>);
   }
 
