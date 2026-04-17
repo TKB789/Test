@@ -7060,22 +7060,28 @@ const NotebookPanel=()=>{
   const pageBgSvg=(type,bgColor)=>{const light=isLightBg(bgColor);
     const lineColor=light?"rgba(0,0,0,.08)":"rgba(255,255,255,.06)";
     const dotColor=light?"rgba(0,0,0,.12)":"rgba(255,255,255,.08)";
+    // All styles use 24px row spacing so text & drawings stay aligned when switching styles.
     if(type==="lined")return <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
-        <defs><pattern id="lined28" width="100%" height="28" patternUnits="userSpaceOnUse" x="0" y="28"><line x1="0" y1="28" x2="100%" y2="28" stroke={lineColor} strokeWidth="1"/></pattern></defs>
-        <rect width="100%" height="100%" fill="url(#lined28)"/></svg>;
+        <defs><pattern id="lined24" width="100%" height="24" patternUnits="userSpaceOnUse" x="0" y="24"><line x1="0" y1="24" x2="100%" y2="24" stroke={lineColor} strokeWidth="1"/></pattern></defs>
+        <rect width="100%" height="100%" fill="url(#lined24)"/></svg>;
     if(type==="square")return <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
         <defs><pattern id="sq8" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="0" cy="0" r="1" fill={dotColor}/><circle cx="24" cy="0" r="1" fill={dotColor}/><circle cx="0" cy="24" r="1" fill={dotColor}/><circle cx="24" cy="24" r="1" fill={dotColor}/></pattern></defs>
         <rect width="100%" height="100%" fill="url(#sq8)"/></svg>;
+    // Hex: same 24px row spacing as Grid, but every other row is offset horizontally by 12px.
+    // Pattern height = 48 (two rows), width = 24. Row 0 sits on even-24 lines, row 24 is shifted by +12.
     if(type==="hex")return <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
-        <defs><pattern id="hx8" width={hcol*2} height={hrow} patternUnits="userSpaceOnUse">
-          <circle cx="0" cy="0" r="1.2" fill={dotColor}/><circle cx={hcol} cy="0" r="1.2" fill={dotColor}/>
-          <circle cx={hcol*2} cy="0" r="1.2" fill={dotColor}/><circle cx={hcol*0.5} cy={hoff} r="1.2" fill={dotColor}/>
-          <circle cx={hcol*1.5} cy={hoff} r="1.2" fill={dotColor}/></pattern></defs>
-        <rect width="100%" height="100%" fill="url(#hx8)"/></svg>;
+        <defs><pattern id="hx24" width="24" height="48" patternUnits="userSpaceOnUse">
+          <circle cx="0" cy="0" r="1" fill={dotColor}/><circle cx="24" cy="0" r="1" fill={dotColor}/>
+          <circle cx="12" cy="24" r="1" fill={dotColor}/>
+          <circle cx="0" cy="48" r="1" fill={dotColor}/><circle cx="24" cy="48" r="1" fill={dotColor}/></pattern></defs>
+        <rect width="100%" height="100%" fill="url(#hx24)"/></svg>;
     return null;};
-  const ts=(type,bgColor)=>({width:"100%",minHeight:600,padding:type==="lined"?"6px 14px":type==="square"?"2px 14px":type==="hex"?"13px 14px":"14px",
+  // All note styles share identical padding and line-height so text & drawings align
+  // on the same 24px grid regardless of which style is selected. First line of text
+  // sits at y=24 (the first row), matching the first dot/line of the pattern.
+  const ts=(type,bgColor)=>({width:"100%",minHeight:600,padding:"6px 14px",
     background:"transparent",border:"none",color:isLightBg(bgColor)?"#1a1a2e":"#e8e0f0",fontSize:15,
-    lineHeight:type==="lined"?"28px":type==="square"?"24px":type==="hex"?"35px":"1.6",
+    lineHeight:"24px",
     outline:"none",resize:"none",fontFamily:"'Nunito',sans-serif",overflow:"hidden"});
   const autoGrowTextarea=()=>{const el=textareaRef.current;if(!el)return;el.style.height="auto";el.style.height=Math.max(600,el.scrollHeight)+"px";};
   const btn=(extra)=>({background:"rgba(255,255,255,.08)",border:"1px solid rgba(255,255,255,.1)",borderRadius:10,padding:"6px 12px",fontSize:13,color:"#ccc",cursor:"pointer",fontWeight:700,...extra});
@@ -8079,8 +8085,9 @@ const NotebookPanel=()=>{
       <div style={{padding:"4px 10px 2px",flexShrink:0}}>
         <div style={{display:"flex",gap:3,flexWrap:"wrap",alignItems:"center",maxHeight:108,overflowY:"auto",overflowX:"hidden"}}>
           {artStyle==="pixel"&&<>
-            <button onClick={()=>setPixelEraser(e=>!e)} style={tbtn(pixelEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",padding:"6px 10px"}:{color:"#ccc",padding:"6px 10px"})}>
-              {pixelEraser?<span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span>:"✏️"}</button>
+            <button onClick={()=>{setPixelEraser(false);setPixEyedropper(false);}} title="Draw" style={tbtn(!pixelEraser?{background:"rgba(102,126,234,.25)",border:"1px solid rgba(102,126,234,.5)",color:"#a8b4f0",padding:"6px 10px"}:{color:"#ccc",padding:"6px 10px"})}>🖌️</button>
+            <button onClick={()=>{setPixelEraser(true);setPixEyedropper(false);}} title="Eraser" style={tbtn(pixelEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",padding:"6px 10px"}:{color:"#ccc",padding:"6px 10px"})}>
+              <span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span></button>
             <div style={{width:1,height:24,background:"rgba(255,255,255,.1)"}}/>
             {(()=>{const pixels=getPixels();const colorCounts={};Object.values(pixels).forEach(color=>{colorCounts[color]=(colorCounts[color]||0)+1;});
               const ranked=Object.entries(colorCounts).sort((a,b)=>b[1]-a[1]);
@@ -8104,8 +8111,9 @@ const NotebookPanel=()=>{
             <button onClick={()=>{setShowPixPicker(v=>!v);setPixPaletteSearch("");}} style={tbtn({padding:"6px 10px",fontSize:11,color:showPixPicker?"#feca57":"#888"})}>{showPixPicker?"▼":"🎨"}</button>
           </>}
           {(artStyle==="vector"||artStyle==="poly")&&<>
-            <button onClick={()=>{setVecEyedropper(false);setVecDrawEraser(e=>!e);}} style={tbtn(vecDrawEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",padding:"6px 10px"}:{color:"#ccc",padding:"6px 10px"})}>
-              {vecDrawEraser?<span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span>:"✏️"}</button>
+            <button onClick={()=>{setVecDrawEraser(false);setVecEyedropper(false);}} title="Draw" style={tbtn(!vecDrawEraser?{background:"rgba(102,126,234,.25)",border:"1px solid rgba(102,126,234,.5)",color:"#a8b4f0",padding:"6px 10px"}:{color:"#ccc",padding:"6px 10px"})}>🖌️</button>
+            <button onClick={()=>{setVecEyedropper(false);setVecDrawEraser(true);}} title="Eraser" style={tbtn(vecDrawEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",padding:"6px 10px"}:{color:"#ccc",padding:"6px 10px"})}>
+              <span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span></button>
             <div style={{width:1,height:24,background:"rgba(255,255,255,.1)"}}/>
             {(()=>{
               if(sortedColors.length>0){
@@ -8167,7 +8175,8 @@ const NotebookPanel=()=>{
           <button onClick={vecUndoDraw} style={tbtn({color:"#aaa"})}>↩</button>
           <button onClick={vecRedoDraw} style={tbtn({color:"#aaa"})}>↪</button>
           <button onClick={()=>{setVecDrawEraser(false);setVecEyedropper(e=>!e);}} style={tbtn(vecEyedropper?{background:"rgba(67,233,123,.2)",border:"1px solid rgba(67,233,123,.4)",color:"#43e97b"}:{color:"#888"})}>💧</button>
-          <button onClick={()=>{setVecEyedropper(false);setVecDrawEraser(e=>!e);}} style={tbtn(vecDrawEraser?{background:"rgba(245,87,108,.2)",border:"1px solid rgba(245,87,108,.4)",color:"#f5576c"}:{color:"#888"})}>{vecDrawEraser?<span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span>:"✏️"}</button>
+          <button onClick={()=>{setVecDrawEraser(false);setVecEyedropper(false);}} title="Draw" style={tbtn(!vecDrawEraser?{background:"rgba(102,126,234,.2)",border:"1px solid rgba(102,126,234,.4)",color:"#a8b4f0"}:{color:"#888"})}>🖌️</button>
+          <button onClick={()=>{setVecEyedropper(false);setVecDrawEraser(true);}} title="Eraser" style={tbtn(vecDrawEraser?{background:"rgba(245,87,108,.2)",border:"1px solid rgba(245,87,108,.4)",color:"#f5576c"}:{color:"#888"})}><span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span></button>
           <div style={{display:"flex",gap:2,alignItems:"center"}}>
             {[2,4,8,14].map(s=><div key={s} onClick={()=>setVecDrawSize(s)} style={{width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:8,background:vecDrawSize===s?"rgba(255,255,255,.12)":"transparent",border:vecDrawSize===s?"1px solid "+vecDrawColor:"1px solid transparent",cursor:"pointer"}}><div style={{width:Math.max(s,2),height:Math.max(s,2),borderRadius:"50%",background:vecDrawEraser?"rgba(245,87,108,.7)":vecDrawColor}}/></div>)}
           </div>
@@ -8256,12 +8265,13 @@ const NotebookPanel=()=>{
         <div style={{width:1,height:16,background:"rgba(255,255,255,.08)"}}/>
         <button onClick={()=>{const title=nbData.pages[nbPageIdx]?.title||"Note";const content=textRef.current||"";const drawSrc=drawLiveSnapshot.current||getDrawData();const bg=page.bgColor||"#fff";const light=isLightBg(page.bgColor);const textColor=light?"#1a1a2e":"#333";
           const scrollEl=drawScrollContainerRef.current;const pageW=scrollEl?scrollEl.offsetWidth:390;
-          const pType=page.type;const pad=pType==="lined"?"6px 14px":pType==="square"?"2px 14px":pType==="hex"?"13px 14px":"14px";
-          const lh=pType==="lined"?"28px":pType==="square"?"24px":pType==="hex"?"35px":"1.6";
+          const pType=page.type;const pad="6px 14px";
+          const lh="24px";
           const lineC=light?"rgba(0,0,0,.12)":"rgba(200,200,200,.18)";const dotC=light?"rgba(0,0,0,.15)":"rgba(200,200,200,.2)";
           let gridSvg="";
-          if(pType==="lined")gridSvg=`<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"><defs><pattern id="pl" width="100%" height="28" patternUnits="userSpaceOnUse" x="0" y="28"><line x1="0" y1="28" x2="100%" y2="28" stroke="${lineC}" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(#pl)"/></svg>`;
+          if(pType==="lined")gridSvg=`<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"><defs><pattern id="pl" width="100%" height="24" patternUnits="userSpaceOnUse" x="0" y="24"><line x1="0" y1="24" x2="100%" y2="24" stroke="${lineC}" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(#pl)"/></svg>`;
           else if(pType==="square")gridSvg=`<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"><defs><pattern id="pg" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="0" cy="0" r="1" fill="${dotC}"/><circle cx="24" cy="0" r="1" fill="${dotC}"/><circle cx="0" cy="24" r="1" fill="${dotC}"/><circle cx="24" cy="24" r="1" fill="${dotC}"/></pattern></defs><rect width="100%" height="100%" fill="url(#pg)"/></svg>`;
+          else if(pType==="hex")gridSvg=`<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"><defs><pattern id="ph" width="24" height="48" patternUnits="userSpaceOnUse"><circle cx="0" cy="0" r="1" fill="${dotC}"/><circle cx="24" cy="0" r="1" fill="${dotC}"/><circle cx="12" cy="24" r="1" fill="${dotC}"/><circle cx="0" cy="48" r="1" fill="${dotC}"/><circle cx="24" cy="48" r="1" fill="${dotC}"/></pattern></defs><rect width="100%" height="100%" fill="url(#ph)"/></svg>`;
           const win=window.open("","_blank");if(win){win.document.write(`<html><head><title>${title}</title><style>@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&display=swap');@media print{body{margin:0;padding:0}.no-print{display:none!important}}body{font-family:'Nunito',sans-serif;margin:0;padding:12px;background:#f5f5f5}h2{margin:0 0 8px;font-size:16px}</style></head><body><h2>${title}</h2><div style="position:relative;width:${pageW}px;background:${bg};border:1px solid ${light?"#ddd":"#444"};border-radius:8px;min-height:400px;overflow:hidden">${gridSvg}<pre style="white-space:pre-wrap;word-break:break-word;font-family:'Nunito',sans-serif;font-size:15px;line-height:${lh};padding:${pad};margin:0;color:${textColor};position:relative">${content.replace(/</g,"&lt;")}</pre>${drawSrc?`<img src="${drawSrc}" style="position:absolute;top:0;left:0;width:100%;pointer-events:none" onload="this.style.height=this.parentElement.offsetHeight+'px'"/>`:""}</div><button class="no-print" onclick="window.print()" style="padding:10px 30px;font-size:16px;margin:12px;cursor:pointer">🖨️ Print</button></body></html>`);win.document.close();}}}
           style={btn({color:"#888",padding:"3px 7px",fontSize:11})}>🖨</button>
         <button onClick={()=>{
@@ -8280,8 +8290,9 @@ const NotebookPanel=()=>{
       {pageDrawMode&&<div style={{display:"flex",flexDirection:"column",gap:4,padding:"2px 10px 6px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
           <button onClick={()=>{saveAll();setPageDrawMode(false);}} style={btn({background:"rgba(102,126,234,.15)",border:"1px solid rgba(102,126,234,.3)",color:"#a8b4f0",padding:"4px 8px"})}>🔡</button>
-          <button onClick={()=>setDrawEraser(e=>!e)} style={btn(drawEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",padding:"4px 8px"}:{color:"#ccc",padding:"4px 8px"})}>
-            {drawEraser?<span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span>:"✏️"}</button>
+          <button onClick={()=>setDrawEraser(false)} title="Draw" style={btn(!drawEraser?{background:"rgba(102,126,234,.25)",border:"1px solid rgba(102,126,234,.5)",color:"#a8b4f0",padding:"4px 8px"}:{color:"#ccc",padding:"4px 8px"})}>🖌️</button>
+          <button onClick={()=>setDrawEraser(true)} title="Eraser" style={btn(drawEraser?{background:"rgba(245,87,108,.25)",border:"1px solid rgba(245,87,108,.5)",color:"#f5576c",padding:"4px 8px"}:{color:"#ccc",padding:"4px 8px"})}>
+            <span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span></button>
           <div style={{width:1,height:20,background:"rgba(255,255,255,.1)"}}/>
           {[
             {c:"#FFFFFF",l:"White"},{c:"#000000",l:"Black"},{c:"#8C8C8C",l:"Gray"},
@@ -8315,12 +8326,13 @@ const NotebookPanel=()=>{
           <button onClick={()=>{const c=drawCanvasRef.current;const dataUrl=c?c.toDataURL("image/png"):(drawLiveSnapshot.current||"");if(!dataUrl)return;const title=nbData.pages[nbPageIdx]?.title||"Drawing";const content=textRef.current||"";
             const scrollEl=drawScrollContainerRef.current;const pageW=scrollEl?scrollEl.offsetWidth:390;
             const bg=page.bgColor||"#fff";const light=isLightBg(page.bgColor);const textColor=light?"#1a1a2e":"#333";
-            const pType=page.type;const pad=pType==="lined"?"6px 14px":pType==="square"?"2px 14px":pType==="hex"?"13px 14px":"14px";
-            const lh=pType==="lined"?"28px":pType==="square"?"24px":pType==="hex"?"35px":"1.6";
+            const pType=page.type;const pad="6px 14px";
+            const lh="24px";
             const lineC=light?"rgba(0,0,0,.12)":"rgba(200,200,200,.18)";const dotC=light?"rgba(0,0,0,.15)":"rgba(200,200,200,.2)";
             let gridSvg="";
-            if(pType==="lined")gridSvg=`<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"><defs><pattern id="pl" width="100%" height="28" patternUnits="userSpaceOnUse" x="0" y="28"><line x1="0" y1="28" x2="100%" y2="28" stroke="${lineC}" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(#pl)"/></svg>`;
+            if(pType==="lined")gridSvg=`<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"><defs><pattern id="pl" width="100%" height="24" patternUnits="userSpaceOnUse" x="0" y="24"><line x1="0" y1="24" x2="100%" y2="24" stroke="${lineC}" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(#pl)"/></svg>`;
             else if(pType==="square")gridSvg=`<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"><defs><pattern id="pg" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="0" cy="0" r="1" fill="${dotC}"/><circle cx="24" cy="0" r="1" fill="${dotC}"/><circle cx="0" cy="24" r="1" fill="${dotC}"/><circle cx="24" cy="24" r="1" fill="${dotC}"/></pattern></defs><rect width="100%" height="100%" fill="url(#pg)"/></svg>`;
+            else if(pType==="hex")gridSvg=`<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"><defs><pattern id="ph" width="24" height="48" patternUnits="userSpaceOnUse"><circle cx="0" cy="0" r="1" fill="${dotC}"/><circle cx="24" cy="0" r="1" fill="${dotC}"/><circle cx="12" cy="24" r="1" fill="${dotC}"/><circle cx="0" cy="48" r="1" fill="${dotC}"/><circle cx="24" cy="48" r="1" fill="${dotC}"/></pattern></defs><rect width="100%" height="100%" fill="url(#ph)"/></svg>`;
             const win=window.open("","_blank");if(win){win.document.write(`<html><head><title>${title}</title><style>@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&display=swap');@media print{body{margin:0;padding:0}.no-print{display:none!important}}body{font-family:'Nunito',sans-serif;margin:0;padding:12px;background:#f5f5f5}h2{margin:0 0 8px;font-size:16px}</style></head><body><h2>${title}</h2><div style="position:relative;width:${pageW}px;background:${bg};border:1px solid ${light?"#ddd":"#444"};border-radius:8px;min-height:400px;overflow:hidden">${gridSvg}<img src="${dataUrl}" style="display:block;width:100%;pointer-events:none" onload="this.style.height=this.naturalHeight*(${pageW}/this.naturalWidth)+'px'"/>${content?`<pre style="white-space:pre-wrap;word-break:break-word;font-family:'Nunito',sans-serif;font-size:15px;line-height:${lh};padding:${pad};margin:0;color:${textColor};position:absolute;top:0;left:0;right:0">${content.replace(/</g,"&lt;")}</pre>`:""}</div><button class="no-print" onclick="window.print()" style="padding:10px 30px;font-size:16px;margin:12px;cursor:pointer">🖨️ Print</button></body></html>`);win.document.close();}}}
             style={btn({fontSize:9,padding:"3px 6px",color:"#888"})}>🖨</button>
         </div>
