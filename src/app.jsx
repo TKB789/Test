@@ -8446,14 +8446,14 @@ const NotebookPanel=()=>{
         }
         const d=readNb();d.pages.push(np);saveNb(d);setNbNewTitle("");
         const newIdx=d.pages.length-1;pageIdxRef.current=newIdx;
-        drawImgRef.current=null;drawCanvasRef.current=null;textRef.current="";
+        drawImgRef.current=null;drawCanvasRef.current=null;drawLiveSnapshot.current=null;textRef.current="";
         setNbPageIdx(newIdx);setNbView("page");}}
         style={{width:"100%",background:"linear-gradient(135deg,#667eea,#764ba2)",color:"#fff",border:"none",borderRadius:10,padding:"8px",fontSize:14,fontWeight:700,cursor:"pointer"}}>+ Add Page</button>
     </div>
     {nbData.pages.length===0&&<div style={{textAlign:"center",opacity:.3,padding:20}}>No pages yet</div>}
     {nbData.pages.map((p,i)=>{
       const isExpanded=nbPreviewMode&&nbExpandedIdx===i;
-      const openPage=()=>{drawImgRef.current=null;drawCanvasRef.current=null;pageIdxRef.current=i;setNbPageIdx(i);setNbView("page");};
+      const openPage=()=>{drawImgRef.current=null;drawCanvasRef.current=null;drawLiveSnapshot.current=null;pageIdxRef.current=i;setNbPageIdx(i);setNbView("page");};
       return(<div key={i} style={{background:isExpanded?"rgba(255,255,255,.05)":"rgba(255,255,255,.03)",border:isExpanded?"1px solid rgba(102,126,234,.2)":"1px solid rgba(255,255,255,.06)",borderRadius:10,padding:"10px 12px",marginBottom:4,cursor:"pointer"}}>
         <div onClick={()=>{if(nbPreviewMode)setNbExpandedIdx(isExpanded?null:i);else openPage();}} style={{display:"flex",alignItems:"center",gap:10}}>
           <span style={{fontSize:13,fontWeight:800,color:"rgba(102,126,234,.6)",minWidth:28}}>{i+1}.</span>
