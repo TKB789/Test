@@ -8338,7 +8338,7 @@ const NotebookPanel=()=>{
         </div>
       </div>}
       <div ref={drawScrollContainerRef} style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch"}}>
-        <div style={{transform:`scale(${pageZoom})`,transformOrigin:"top left",width:`${100/pageZoom}%`}}>
+        <div style={{transform:`scale(${pageZoom})`,transformOrigin:"top left",width:"100%"}}>
           <div style={pageBgStyle(page.bgColor)}>
             {pageBgSvg(page.type,page.bgColor)}
             {!pageDrawMode&&<div style={{position:"relative"}}>
