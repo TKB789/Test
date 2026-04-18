@@ -8101,7 +8101,7 @@ const NotebookPanel=()=>{
               return [
                 PIXEL_PALETTE.find(p=>p.n==="321"),PIXEL_PALETTE.find(p=>p.n==="797"),PIXEL_PALETTE.find(p=>p.n==="973"),
                 PIXEL_PALETTE.find(p=>p.n==="699"),PIXEL_PALETTE.find(p=>p.n==="740"),PIXEL_PALETTE.find(p=>p.n==="550"),
-                PIXEL_PALETTE.find(p=>p.n==="310"),PIXEL_PALETTE.find(p=>p.n==="414"),PIXEL_PALETTE.find(p=>p.n==="Blanc")
+                PIXEL_PALETTE.find(p=>p.n==="310"),PIXEL_PALETTE.find(p=>p.n==="Blanc")
               ].filter(Boolean).map(p=>{const lum=parseInt(p.c.slice(1,3),16)*.299+parseInt(p.c.slice(3,5),16)*.587+parseInt(p.c.slice(5,7),16)*.114;
                 return(<div key={p.n} onClick={()=>{setPixelColor(p.c);setPixelEraser(false);setPixEyedropper(false);}} title={`DMC ${p.n} ${p.nm}`}
                 style={{...cSwatch(p.c,pixelColor===p.c&&!pixelEraser,30),display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -8126,7 +8126,7 @@ const NotebookPanel=()=>{
               return [
                 PIXEL_PALETTE.find(p=>p.n==="321"),PIXEL_PALETTE.find(p=>p.n==="797"),PIXEL_PALETTE.find(p=>p.n==="973"),
                 PIXEL_PALETTE.find(p=>p.n==="699"),PIXEL_PALETTE.find(p=>p.n==="740"),PIXEL_PALETTE.find(p=>p.n==="550"),
-                PIXEL_PALETTE.find(p=>p.n==="310"),PIXEL_PALETTE.find(p=>p.n==="414"),PIXEL_PALETTE.find(p=>p.n==="Blanc")
+                PIXEL_PALETTE.find(p=>p.n==="310"),PIXEL_PALETTE.find(p=>p.n==="Blanc")
               ].filter(Boolean).map(p=>{
                 const lum=parseInt(p.c.slice(1,3),16)*.299+parseInt(p.c.slice(3,5),16)*.587+parseInt(p.c.slice(5,7),16)*.114;
                 return(<div key={p.n+"v"} onClick={()=>{setVecDrawColor(p.c);setVecDrawEraser(false);setVecEyedropper(false);}}
@@ -8144,7 +8144,7 @@ const NotebookPanel=()=>{
         <input value={pixPaletteSearch} onChange={e=>setPixPaletteSearch(e.target.value)} placeholder="Search DMC # or color name..." style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid rgba(255,255,255,.12)",background:"rgba(255,255,255,.06)",color:"#e8e0f0",fontSize:11,outline:"none",marginBottom:4,boxSizing:"border-box"}}/>
         {/* Pinned primary colors */}
         {!pixPaletteSearch.trim()&&<div style={{display:"flex",gap:3,marginBottom:4,flexWrap:"wrap"}}>
-          {["321","797","973","699","740","550","310","414","Blanc","498","996","725"].map(n=>{const p=PIXEL_PALETTE.find(x=>x.n===n);if(!p)return null;
+          {["321","797","973","699","740","550","310","Blanc","498","996","725"].map(n=>{const p=PIXEL_PALETTE.find(x=>x.n===n);if(!p)return null;
             const selColor=artStyle==="pixel"?pixelColor:vecDrawColor;const isSel=p.c===selColor;
             const lum=parseInt(p.c.slice(1,3),16)*.299+parseInt(p.c.slice(3,5),16)*.587+parseInt(p.c.slice(5,7),16)*.114;
             return(<div key={"pin"+n} onClick={()=>{if(artStyle==="pixel"){setPixelColor(p.c);setPixelEraser(false);setPixEyedropper(false);}else{setVecDrawColor(p.c);setVecDrawEraser(false);setVecEyedropper(false);}}}
@@ -8175,8 +8175,6 @@ const NotebookPanel=()=>{
           <button onClick={vecUndoDraw} style={tbtn({color:"#aaa"})}>↩</button>
           <button onClick={vecRedoDraw} style={tbtn({color:"#aaa"})}>↪</button>
           <button onClick={()=>{setVecDrawEraser(false);setVecEyedropper(e=>!e);}} style={tbtn(vecEyedropper?{background:"rgba(67,233,123,.2)",border:"1px solid rgba(67,233,123,.4)",color:"#43e97b"}:{color:"#888"})}>💧</button>
-          <button onClick={()=>{setVecDrawEraser(false);setVecEyedropper(false);}} title="Draw" style={tbtn(!vecDrawEraser?{background:"rgba(102,126,234,.2)",border:"1px solid rgba(102,126,234,.4)",color:"#a8b4f0"}:{color:"#888"})}>🖌️</button>
-          <button onClick={()=>{setVecEyedropper(false);setVecDrawEraser(true);}} title="Eraser" style={tbtn(vecDrawEraser?{background:"rgba(245,87,108,.2)",border:"1px solid rgba(245,87,108,.4)",color:"#f5576c"}:{color:"#888"})}><span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span></button>
           <div style={{display:"flex",gap:2,alignItems:"center"}}>
             {[2,4,8,14].map(s=><div key={s} onClick={()=>setVecDrawSize(s)} style={{width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:8,background:vecDrawSize===s?"rgba(255,255,255,.12)":"transparent",border:vecDrawSize===s?"1px solid "+vecDrawColor:"1px solid transparent",cursor:"pointer"}}><div style={{width:Math.max(s,2),height:Math.max(s,2),borderRadius:"50%",background:vecDrawEraser?"rgba(245,87,108,.7)":vecDrawColor}}/></div>)}
           </div>
@@ -8295,7 +8293,7 @@ const NotebookPanel=()=>{
             <span style={{display:"inline-block",transform:"rotate(180deg)"}}>✏️</span></button>
           <div style={{width:1,height:20,background:"rgba(255,255,255,.1)"}}/>
           {[
-            {c:"#FFFFFF",l:"White"},{c:"#000000",l:"Black"},{c:"#8C8C8C",l:"Gray"},
+            {c:"#FFFFFF",l:"White"},{c:"#000000",l:"Black"},
             {c:"#C72B3B",l:"Red"},{c:"#13477D",l:"Blue"},{c:"#FFE502",l:"Yellow"},
             {c:"#056517",l:"Green"},{c:"#FF8313",l:"Orange"},{c:"#5C184E",l:"Purple"}
           ].map(p=>(
