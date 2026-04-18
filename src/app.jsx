@@ -6334,6 +6334,15 @@ const NotebookPanel=()=>{
     if(el)textRef.current=el.value;
     save("content",textRef.current||"");
   };
+  // Called on blur: if the user tapped a line past the end but never typed there,
+  // trim trailing blank lines so the saved note doesn't keep growing.
+  const saveTextAndTrim=()=>{
+    const el=textareaRef.current;if(!el)return;
+    const trimmed=el.value.replace(/\n+$/,"");
+    if(trimmed!==el.value){el.value=trimmed;autoGrowTextarea();}
+    textRef.current=trimmed;
+    save("content",trimmed);
+  };
   const saveCanvas=()=>{
     const c=drawCanvasRef.current;if(!c)return;
     try{const url=c.toDataURL("image/png");drawImgRef.current=url;drawLiveSnapshot.current=url;save("drawData",url);}catch{}
@@ -8340,11 +8349,34 @@ const NotebookPanel=()=>{
           <div style={pageBgStyle(page.bgColor)}>
             {pageBgSvg(page.type,page.bgColor)}
             {!pageDrawMode&&<div style={{position:"relative",cursor:"text"}} onClick={(e)=>{
-              // If the user tapped the textarea itself, let iOS handle cursor placement normally.
-              // If they tapped the surrounding area (placeholder space below the last line),
-              // focus the textarea and put the cursor at the end of the text.
               const ta=textareaRef.current;if(!ta)return;
-              if(e.target!==ta){ta.focus();const len=ta.value.length;ta.setSelectionRange(len,len);}
+              // If user tapped the textarea itself, let the browser handle cursor placement.
+              if(e.target===ta)return;
+              // Otherwise: figure out which visual line the tap landed on, auto-pad the text
+              // with enough newlines to reach that line, and place the cursor there. This lets
+              // users tap any line past the end of their text and start typing immediately.
+              const rect=ta.getBoundingClientRect();
+              const padTop=6; // must match the padding-top in ts()
+              const lineH=24; // must match the lineHeight in ts()
+              const relY=(e.clientY-rect.top-padTop)/pageZoom;
+              const targetLine=Math.max(0,Math.floor(relY/lineH));
+              const cur=ta.value;
+              const existingLines=cur===""?0:cur.split("\n").length;
+              if(targetLine>=existingLines){
+                // Add newlines to reach the tapped line
+                const pad="\n".repeat(targetLine-existingLines+(cur===""?0:1));
+                const newVal=cur+pad;
+                ta.value=newVal;textRef.current=newVal;
+                ta.focus();
+                const len=newVal.length;ta.setSelectionRange(len,len);
+                autoGrowTextarea();saveText();
+              }else{
+                // Tapped a line that already exists — put cursor at the end of that line
+                const lines=cur.split("\n");
+                let pos=0;for(let i=0;i<targetLine;i++)pos+=lines[i].length+1;
+                pos+=lines[targetLine].length;
+                ta.focus();ta.setSelectionRange(pos,pos);
+              }
             }}>
               <textarea ref={(el)=>{if(el){
                 const curIdx=String(pageIdxRef.current);
@@ -8353,7 +8385,7 @@ const NotebookPanel=()=>{
                   textRef.current=content;el.value=content;el.dataset.loadedIdx=curIdx;
                 }
                 textareaRef.current=el;el.style.height="auto";el.style.height=Math.max(600,el.scrollHeight)+"px";}}
-              } onInput={onTextInput} onBlur={()=>saveText()} placeholder="Start writing..." style={{...ts(page.type,page.bgColor),position:"relative",zIndex:1}}/>
+              } onInput={onTextInput} onBlur={()=>saveTextAndTrim()} placeholder="Start writing..." style={{...ts(page.type,page.bgColor),position:"relative",zIndex:1}}/>
               {existingDraw&&<img src={existingDraw} style={{position:"absolute",top:0,left:0,width:"100%",pointerEvents:"none",opacity:.7,zIndex:2}} onLoad={(e)=>{
                 // Set image height based on its natural aspect ratio at container width to match canvas dimensions
                 const imgEl=e.target;const cw=imgEl.parentElement?.offsetWidth||imgEl.offsetWidth;
