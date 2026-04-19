@@ -6666,6 +6666,21 @@ const NotebookPanel=()=>{
     {n:"B5200",c:"#FDFDFD",nm:"Snow White"},
   ];
   const PIXEL_COLORS=PIXEL_PALETTE.map(p=>p.c);
+  // Snap any hex color to its nearest DMC palette color using squared RGB distance.
+  // Used by eyedroppers so anti-aliased edge pixels still highlight the right swatch.
+  const snapToPalette=(hex)=>{
+    if(!hex||typeof hex!=="string")return hex;
+    const h=hex.replace("#","");if(h.length!==6)return hex;
+    const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);
+    let best=null,bestDist=Infinity;
+    for(const p of PIXEL_PALETTE){
+      const ph=p.c.replace("#","");if(ph.length!==6)continue;
+      const pr=parseInt(ph.slice(0,2),16),pg=parseInt(ph.slice(2,4),16),pb=parseInt(ph.slice(4,6),16);
+      const d=(r-pr)*(r-pr)+(g-pg)*(g-pg)+(b-pb)*(b-pb);
+      if(d<bestDist){bestDist=d;best=p.c;}
+    }
+    return best||hex;
+  };
   // 36-color curated DMC subset for image-to-pixel conversion (broad spectrum coverage, manageable thread count)
   const DMC_CORE_36=[
     "310","414","318","762","Blanc","Ecru",       // black → grays → white
@@ -6959,7 +6974,7 @@ const NotebookPanel=()=>{
       if(pixEyedropperRef2.current&&cell){
         const d=readNb();const pixels=d.pages?.[nbPageIdx]?.pixels||{};
         const key=`${cell.row}-${cell.col}`;const color=pixels[key];
-        if(color){setPixelColor(color);setPixelEraser(false);}
+        if(color){setPixelColor(snapToPalette(color));setPixelEraser(false);}
         setPixEyedropper(false);pixIsPainting.current=false;
         if(e.preventDefault)e.preventDefault();return;
       }
@@ -7941,7 +7956,7 @@ const NotebookPanel=()=>{
                     tc2.getContext("2d").drawImage(baseImg,0,0,tc2.width,tc2.height);
                     const ix=Math.floor(p.x*tc2.width/el.width),iy=Math.floor(p.y*tc2.height/el.height);
                     const px2=tc2.getContext("2d").getImageData(ix,iy,1,1).data;
-                    setVecDrawColor("#"+[px2[0],px2[1],px2[2]].map(v=>v.toString(16).padStart(2,"0")).join(""));setVecEyedropper(false);
+                    setVecDrawColor(snapToPalette("#"+[px2[0],px2[1],px2[2]].map(v=>v.toString(16).padStart(2,"0")).join("")));setVecEyedropper(false);
                   }return;}
                 vecPushHistory();strokeStartedAt2=Date.now();
                 vecIsDrawing.current=true;const ctx=el.getContext("2d");
@@ -7981,7 +7996,7 @@ const NotebookPanel=()=>{
                   tc2.getContext("2d").drawImage(baseImg,0,0,tc2.width,tc2.height);
                   const ix=Math.floor(p.x*tc2.width/el.width),iy=Math.floor(p.y*tc2.height/el.height);
                   const px2=tc2.getContext("2d").getImageData(ix,iy,1,1).data;
-                  setVecDrawColor("#"+[px2[0],px2[1],px2[2]].map(v=>v.toString(16).padStart(2,"0")).join(""));setVecEyedropper(false);
+                  setVecDrawColor(snapToPalette("#"+[px2[0],px2[1],px2[2]].map(v=>v.toString(16).padStart(2,"0")).join("")));setVecEyedropper(false);
                 }return;}
               vecPushHistory();vecIsDrawing.current=true;const ctx=el.getContext("2d");
               const col=vecDrawColorRef.current,sz=vecDrawSizeRef.current,erasing=vecDrawEraserRef.current;
@@ -8034,7 +8049,7 @@ const NotebookPanel=()=>{
                     tc2.getContext("2d").drawImage(baseImg,0,0,tc2.width,tc2.height);
                     const ix=Math.floor(p.x*tc2.width/el.width),iy=Math.floor(p.y*tc2.height/el.height);
                     const px2=tc2.getContext("2d").getImageData(ix,iy,1,1).data;
-                    setVecDrawColor("#"+[px2[0],px2[1],px2[2]].map(v=>v.toString(16).padStart(2,"0")).join(""));setVecEyedropper(false);
+                    setVecDrawColor(snapToPalette("#"+[px2[0],px2[1],px2[2]].map(v=>v.toString(16).padStart(2,"0")).join("")));setVecEyedropper(false);
                   }return;}
                 vecPushHistory();strokeStartedAt2=Date.now();
                 vecIsDrawing.current=true;const ctx=el.getContext("2d");
@@ -8074,7 +8089,7 @@ const NotebookPanel=()=>{
                   tc2.getContext("2d").drawImage(baseImg,0,0,tc2.width,tc2.height);
                   const ix=Math.floor(p.x*tc2.width/el.width),iy=Math.floor(p.y*tc2.height/el.height);
                   const px2=tc2.getContext("2d").getImageData(ix,iy,1,1).data;
-                  setVecDrawColor("#"+[px2[0],px2[1],px2[2]].map(v=>v.toString(16).padStart(2,"0")).join(""));setVecEyedropper(false);
+                  setVecDrawColor(snapToPalette("#"+[px2[0],px2[1],px2[2]].map(v=>v.toString(16).padStart(2,"0")).join("")));setVecEyedropper(false);
                 }return;}
               vecPushHistory();vecIsDrawing.current=true;const ctx=el.getContext("2d");
               const col=vecDrawColorRef.current,sz=vecDrawSizeRef.current,erasing=vecDrawEraserRef.current;
